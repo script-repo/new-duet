@@ -23,6 +23,7 @@ from tandem import __version__
 from tandem.connectors.base import PushRequest
 from tandem.connectors.simple import WebhookAuthError
 from tandem.runtime import Runtime
+from tandem.server.routes_push import push_router
 
 log = logging.getLogger("tandem.server")
 STATIC_DIR = Path(__file__).parent / "static"
@@ -381,6 +382,8 @@ def create_app(rt: Runtime | None = None, run_scheduler: bool | None = None) -> 
         if r.status_code >= 400:
             raise HTTPException(502, f"transcription failed: {runtime.redactor.text(r.text[:300])}")
         return {"text": r.json().get("text", "")}
+
+    app.include_router(push_router(runtime, auth))
 
     # ---- UI -------------------------------------------------------------------------------------------------------
     @app.exception_handler(404)

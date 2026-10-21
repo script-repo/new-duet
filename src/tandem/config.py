@@ -136,6 +136,16 @@ class NotifyConfig(BaseModel):
     quiet_hours: str | None = "21:00-07:00"
     max_per_hour: int = 4
     channels: list[NotifyChannel] = Field(default_factory=lambda: [NotifyChannel(type="ui")])
+    push_enabled: bool = True  # Web Push to subscribed devices (SPEC §15.4)
+    vapid_subject: str | None = (
+        None  # `mailto:` or `https:` contact for push services; TANDEM_VAPID_SUBJECT wins
+    )
+
+    def webpush_on(self) -> bool:
+        """Web Push is a channel by default; listing `channels` yourself without a `webpush` entry turns it off."""
+        if not self.push_enabled:
+            return False
+        return "channels" not in self.model_fields_set or any(c.type == "webpush" for c in self.channels)
 
 
 class HarnessConfig(BaseModel):
