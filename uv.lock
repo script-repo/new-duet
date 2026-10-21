@@ -7,6 +7,14 @@ resolution-markers = [
 ]
 
 [[package]]
+name = "ambientq"
+version = "0.2.0"
+source = { git = "https://github.com/script-repo/nai-recon.git?rev=ambientq#981c09dba20f9b781959a272843c64c748a635e5" }
+dependencies = [
+    { name = "pyyaml" },
+]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.5"
 source = { registry = "https://pypi.org/simple" }
@@ -2069,6 +2077,9 @@ openai-agents = [
 postgres = [
     { name = "psycopg", extra = ["binary"] },
 ]
+quality = [
+    { name = "ambientq" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -2080,6 +2091,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "ambientq", marker = "extra == 'quality'", git = "https://github.com/script-repo/nai-recon.git?rev=ambientq" },
     { name = "caldav", marker = "extra == 'caldav'", specifier = ">=1.4,<3" },
     { name = "claude-agent-sdk", marker = "extra == 'claude-sdk'", specifier = ">=0.1" },
     { name = "cryptography", specifier = ">=44" },
@@ -2106,7 +2118,7 @@ requires-dist = [
     { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2024.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32,<1" },
 ]
-provides-extras = ["postgres", "mcp", "caldav", "deepagents", "claude-sdk", "openai-agents"]
+provides-extras = ["postgres", "mcp", "caldav", "deepagents", "claude-sdk", "openai-agents", "quality"]
 
 [package.metadata.requires-dev]
 dev = [

@@ -13,6 +13,8 @@ from typing import Any
 
 from tandem.engine import prompts
 from tandem.models.base import Message
+from tandem.telemetry import tracer
+from tandem.util import new_id
 
 log = logging.getLogger("tandem.triage")
 
@@ -101,6 +103,13 @@ class Triage:
     async def run(self, events: list[dict[str, Any]]) -> list[Verdict]:
         if not events:
             return []
+        with tracer().agent_span("triage", new_id("tri"), **{"tandem.triage.events": len(events)}) as sp:
+            verdicts = await self._run(events)
+            if sp is not None:
+                sp.set("tandem.triage.actions", [v.action for v in verdicts])
+            return verdicts
+
+    async def _run(self, events: list[dict[str, Any]]) -> list[Verdict]:
         vip, mute = self.rt.memory.rules("vip"), self.rt.memory.rules("mute")
         rules = {ev["id"]: apply_rules(ev, vip, mute) for ev in events}
         verdicts: list[Verdict] = []

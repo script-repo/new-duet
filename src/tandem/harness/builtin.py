@@ -21,7 +21,7 @@ async def tool_loop(messages: list[Message], ctx: HarnessContext, max_steps: int
         messages.append(Message("assistant", resp.text, tool_calls=resp.tool_calls))
         for call in resp.tool_calls:
             await ctx.log("tool", f"{call.name}({_brief_args(call.args)})")
-            outcome = await ctx.tools.invoke(call.name, call.args)
+            outcome = await ctx.tools.invoke(call.name, call.args, call.id)
             await ctx.log("result", f"{call.name}: {outcome.decision} - {outcome.text[:300]}")
             messages.append(Message("tool", outcome.text, tool_call_id=call.id, name=call.name))
     return "Stopped: reached the step limit before finishing.", max_steps

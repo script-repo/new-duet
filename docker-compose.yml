@@ -4,6 +4,8 @@
 # With Postgres instead of SQLite:
 #   TANDEM_DATABASE_URL=postgresql+psycopg://tandem:tandem@postgres:5432/tandem \
 #     docker compose --profile postgres up -d
+# With the quality loop (ambientq grades Tandem's traces; docs/QUALITY.md):
+#   TANDEM_TELEMETRY=1 docker compose --profile quality up -d   # dashboard on http://localhost:8080
 services:
   tandem:
     build: .
@@ -15,6 +17,9 @@ services:
     environment:
       TANDEM_DATA_DIR: /data
       TANDEM_DATABASE_URL: ${TANDEM_DATABASE_URL:-}
+      # Off unless TANDEM_TELEMETRY=1; the endpoint is the ambientq service of the quality profile.
+      TANDEM_TELEMETRY: ${TANDEM_TELEMETRY:-0}
+      OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://ambientq:8080/v1/traces}
     volumes:
       - tandem-data:/data
       # Mount your own config and policy:
@@ -36,6 +41,41 @@ services:
       retries: 10
     restart: unless-stopped
 
+  # ambientq, built from its git branch: OTLP receiver + dashboard.
+  ambientq:
+    profiles: [quality]
+    build: https://github.com/script-repo/nai-recon.git#ambientq
+    image: ambientq:local
+    command: ["-c", "/config/ambientq.yaml", "serve"]
+    ports: ["127.0.0.1:8080:8080"]
+    environment: &ambientq-env
+      AMBIENTQ_LLM_BASE_URL: ${AMBIENTQ_LLM_BASE_URL:-}
+      AMBIENTQ_LLM_MODEL: ${AMBIENTQ_LLM_MODEL:-}
+      AMBIENTQ_LLM_API_KEY: ${AMBIENTQ_LLM_API_KEY:-}
+    volumes: &ambientq-volumes
+      - ./deploy/ambientq.yaml:/config/ambientq.yaml:ro
+      - .:/harness:ro   # harness.yaml, src/tandem/prompts/ and harness/ from this checkout
+      - ambientq-data:/home/ambientq   # a named volume here inherits the non-root user's ownership
+    restart: unless-stopped
+
+  # Grades new conversations every 10 minutes: deterministic checks, plus the LLM judge when configured.
+  ambientq-eval:
+    profiles: [quality]
+    image: ambientq:local
+    depends_on: [ambientq]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          if [ -n "$$AMBIENTQ_LLM_BASE_URL" ]; then mode=""; else mode="--checks-only"; fi
+          ambientq -c /config/ambientq.yaml evaluate $$mode || true
+          sleep "$${AMBIENTQ_EVERY_S:-600}"
+        done
+    environment: *ambientq-env
+    volumes: *ambientq-volumes
+    restart: unless-stopped
+
 volumes:
   tandem-data:
   tandem-pg:
+  ambientq-data:

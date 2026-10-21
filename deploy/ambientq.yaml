@@ -1,0 +1,17 @@
+# ambientq beside Tandem (docker compose --profile quality up). See docs/QUALITY.md.
+# Secrets never go here: only the names of environment variables that hold them.
+store:
+  url: sqlite:////home/ambientq/ambientq.db   # the image user's home, on the ambientq-data volume
+harness:
+  path: /harness                 # the Tandem checkout, mounted read-only: harness.yaml + prompts + harness/
+llm:
+  # Optional LLM judge (any OpenAI-compatible endpoint: NAI, vLLM, OpenAI), set from the environment:
+  # AMBIENTQ_LLM_BASE_URL, AMBIENTQ_LLM_MODEL and the key in AMBIENTQ_LLM_API_KEY. Without a base URL the
+  # loop runs the deterministic checks only, which need no model.
+  base_url: null
+  api_key_env: AMBIENTQ_LLM_API_KEY
+  model: null
+  temperature: 0
+sampling: {rate: 0.2, seed: tandem, max_priority: 50}
+budget: {max_tokens_per_run: 200000, max_conversations_per_run: 100}
+server: {host: 0.0.0.0, port: 8080, ingest_token_env: AMBIENTQ_INGEST_TOKEN}

@@ -31,6 +31,8 @@ caldav = ["caldav>=1.4,<3"]
 deepagents = ["deepagents>=0.2", "langchain>=1.0", "langchain-mcp-adapters>=0.1", "langchain-anthropic>=1.0", "langchain-openai>=1.0"]
 claude-sdk = ["claude-agent-sdk>=0.1"]
 openai-agents = ["openai-agents>=0.3"]
+# The ambientq quality loop (docs/QUALITY.md): only for its integration test and local grading.
+quality = ["ambientq @ git+https://github.com/script-repo/nai-recon.git@ambientq"]
 
 [project.scripts]
 tandem = "tandem.cli:main"
@@ -41,6 +43,9 @@ dev = ["pytest>=8.3,<9", "pytest-asyncio>=1.0,<2", "ruff>=0.14,<1", "respx>=0.22
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tandem"]

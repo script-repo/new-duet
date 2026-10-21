@@ -27,6 +27,8 @@ jobs:
       - run: uv sync --frozen
       - run: uv run ruff check .
       - run: uv run ruff format --check .
+      - name: harness/ matches the code (tandem harness export)
+        run: uv run tandem harness export --check
 
   test:
     name: test (${{ matrix.os }}, py${{ matrix.python }})
@@ -56,6 +58,19 @@ jobs:
         with: {python-version: "3.13"}
       - run: uv sync --frozen --extra deepagents --extra openai-agents --extra mcp
       - run: uv run pytest -q tests/test_harnesses.py -rs
+
+  quality:
+    name: quality (Tandem traces graded by ambientq)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with: {python-version: "3.13"}
+      - run: uv sync --frozen --extra quality
+      - run: uv run pytest -q tests/test_quality_ambientq.py tests/test_telemetry.py -rs
+      - name: the integration test ran (not skipped)
+        shell: bash
+        run: uv run pytest -q tests/test_quality_ambientq.py -rs | tee out.txt && ! grep -q skipped out.txt
 
   postgres:
     runs-on: ubuntu-latest

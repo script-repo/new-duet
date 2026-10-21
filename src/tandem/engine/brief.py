@@ -10,6 +10,8 @@ from zoneinfo import ZoneInfo
 
 from tandem.engine import prompts
 from tandem.models.base import Message
+from tandem.telemetry import tracer
+from tandem.util import new_id
 
 log = logging.getLogger("tandem.brief")
 
@@ -87,6 +89,14 @@ class BriefBuilder:
         ]
 
     async def run(self, now: datetime | None = None) -> dict[str, Any]:
+        with tracer().agent_span("brief", new_id("brf")) as sp:
+            brief = await self._run(now)
+            if sp is not None:
+                sp.set("tandem.brief.id", brief["id"])
+                sp.set("tandem.brief.items", len(brief["items"]))
+            return brief
+
+    async def _run(self, now: datetime | None = None) -> dict[str, Any]:
         rt = self.rt
         now = now or rt.clock.now()
         data = await self.gather(now)

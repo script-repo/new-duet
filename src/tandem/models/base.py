@@ -12,6 +12,7 @@ from typing import Any, Literal
 import httpx
 
 from tandem.config import ModelProfile
+from tandem.telemetry import KIND_CLIENT, PROVIDER_NAMES, tracer
 from tandem.util import extract_json
 
 
@@ -87,6 +88,38 @@ class ModelClient(ABC):
         json_mode: bool = False,
         max_tokens: int | None = None,
         temperature: float | None = None,
+    ) -> ModelResponse:
+        t = tracer()
+        attrs = {
+            "gen_ai.operation.name": "chat",
+            "gen_ai.provider.name": PROVIDER_NAMES.get(self.profile.provider, self.profile.provider),
+            "gen_ai.request.model": self.profile.model,
+            "gen_ai.request.max_tokens": max_tokens or self.profile.max_tokens,
+            "gen_ai.request.temperature": temperature
+            if temperature is not None
+            else self.profile.temperature,
+            "gen_ai.output.type": "json" if json_mode else "text",
+            "server.address": self.profile.base_url or None,
+            "tandem.role": self.role,
+        }
+        with t.span(f"chat {self.profile.model}", attrs, kind=KIND_CLIENT) as sp:
+            resp = None
+            try:
+                resp = await self._complete_retrying(
+                    messages, tools, json_mode=json_mode, max_tokens=max_tokens, temperature=temperature
+                )
+                return resp
+            finally:
+                t.record_model_call(sp, messages, resp, tools)
+
+    async def _complete_retrying(
+        self,
+        messages: list[Message],
+        tools: list[ToolSpec] | None,
+        *,
+        json_mode: bool,
+        max_tokens: int | None,
+        temperature: float | None,
     ) -> ModelResponse:
         delay = 1.0
         for attempt in range(self.max_retries + 1):

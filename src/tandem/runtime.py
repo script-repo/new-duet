@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from tandem import __version__
+from tandem import __version__, telemetry
 from tandem.artifacts import Artifacts
 from tandem.bus import EventBus
 from tandem.config import AppConfig, Settings, examples_dir, load_config, policy_path
@@ -60,6 +60,9 @@ class Runtime:
         self.store = Store(self.settings.db_url, self.bus, self.clock)
         self.secrets = SecretResolver(env)
         self.redactor = Redactor(self.secrets)
+        self.tracer = telemetry.from_config(self.cfg.telemetry, self.redactor.text, env)
+        if self.tracer.enabled:
+            telemetry.set_tracer(self.tracer)
         self.cipher = Cipher(load_server_key(self.settings.state_dir, env))
         self.vault = TokenVault(self.store, self.cipher, self.redactor)
         self.policy = Policy.load(policy_path(self.cfg))
@@ -130,6 +133,7 @@ class Runtime:
             self.background(self._demo_eval())  # so the Evals page has numbers in the demo
         if run_scheduler:
             self.scheduler.start()
+        self.tracer.start()
 
     async def _demo_eval(self) -> None:
         from tandem.evals import run_triage_eval, save_result
@@ -142,6 +146,9 @@ class Runtime:
 
     async def stop(self) -> None:
         await self.scheduler.stop()
+        await self.tracer.stop()
+        if telemetry.tracer() is self.tracer:
+            telemetry.set_tracer(None)
         for t in list(self.tasks._running.values()):
             t.cancel()
         for t in list(self._bg):

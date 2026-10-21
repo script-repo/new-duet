@@ -16,6 +16,7 @@ from tandem.models.base import ToolSpec
 from tandem.policy import Policy
 from tandem.security import Redactor
 from tandem.store import Store
+from tandem.telemetry import tracer
 from tandem.util import iso, to_text, truncate
 
 if TYPE_CHECKING:
@@ -242,6 +243,34 @@ class ApprovalService:
 # ---- registry ---------------------------------------------------------------------------------------------
 
 
+async def traced_call(
+    name: str,
+    args: dict[str, Any] | None,
+    ctx: ToolContext,
+    call_id: str | None,
+    run: Callable[[], Awaitable[ToolOutcome]],
+) -> ToolOutcome:
+    """Run one tool call inside an `execute_tool` span (a no-op unless telemetry is on)."""
+    t = tracer()
+    attrs = {
+        "gen_ai.operation.name": "execute_tool",
+        "gen_ai.tool.name": name,
+        "gen_ai.tool.type": "function",
+        "gen_ai.tool.call.id": call_id,
+        "tandem.task.id": ctx.task_id,
+    }
+    with t.span(f"execute_tool {name}", attrs) as sp:
+        outcome = await run()
+        if sp is not None:
+            sp.set("gen_ai.tool.call.arguments", t.content(args or {}))
+            sp.set("gen_ai.tool.call.result", t.content(outcome.text))
+            sp.set("tandem.approval.decision", outcome.decision)
+            if not outcome.ok:
+                sp.set("error.type", outcome.decision)  # error | invalid | denied | rejected | expired
+                sp.error(outcome.text)
+        return outcome
+
+
 @dataclass
 class ToolRegistry:
     store: Store
@@ -295,7 +324,12 @@ class ToolRegistry:
             detail=self.redactor.text(detail)[:2000],
         )
 
-    async def invoke(self, name: str, args: dict[str, Any] | None, ctx: ToolContext) -> ToolOutcome:
+    async def invoke(
+        self, name: str, args: dict[str, Any] | None, ctx: ToolContext, call_id: str | None = None
+    ) -> ToolOutcome:
+        return await traced_call(name, args, ctx, call_id, lambda: self._invoke(name, args, ctx))
+
+    async def _invoke(self, name: str, args: dict[str, Any] | None, ctx: ToolContext) -> ToolOutcome:
         args = dict(args or {})
         tool = self.tools.get(name)
         if tool is None:
@@ -426,11 +460,15 @@ class GatedTools:
     def names(self) -> list[str]:
         return list(self.tools)
 
-    async def invoke(self, name: str, args: dict[str, Any] | None) -> ToolOutcome:
+    async def invoke(self, name: str, args: dict[str, Any] | None, call_id: str | None = None) -> ToolOutcome:
         self.calls += 1
         if name not in self.tools:
-            return ToolOutcome(False, f"Tool {name!r} is not available in this task.", "invalid")
-        return await self.registry.invoke(name, args, self.ctx)
+
+            async def refuse() -> ToolOutcome:
+                return ToolOutcome(False, f"Tool {name!r} is not available in this task.", "invalid")
+
+            return await traced_call(name, args, self.ctx, call_id, refuse)
+        return await self.registry.invoke(name, args, self.ctx, call_id)
 
     async def check_external(
         self, name: str, tags: set[str], args: dict[str, Any], title: str | None = None

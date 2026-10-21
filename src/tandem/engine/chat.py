@@ -9,7 +9,9 @@ from typing import Any
 
 from tandem.engine import prompts
 from tandem.models.base import Message
+from tandem.telemetry import tracer
 from tandem.tools import GatedTools, ToolContext
+from tandem.util import new_id
 
 log = logging.getLogger("tandem.chat")
 CHAT_TOOLS = ("start_task", "today_summary", "approvals_list", "memory_search", "memory_write", "skill_load")
@@ -50,6 +52,10 @@ class ChatAgent:
         return out
 
     async def reply(self, text: str, harness: str | None = None) -> dict[str, Any] | None:
+        with tracer().agent_span("chat", new_id("chat")):
+            return await self._reply(text, harness)
+
+    async def _reply(self, text: str, harness: str | None = None) -> dict[str, Any] | None:
         rt = self.rt
         async with self._lock:
             rt.store.bus.publish("typing", {"on": True})
@@ -81,7 +87,7 @@ class ChatAgent:
                         args = dict(call.args)
                         if call.name == "start_task" and harness and not args.get("harness"):
                             args["harness"] = harness
-                        outcome = await gated.invoke(call.name, args)
+                        outcome = await gated.invoke(call.name, args, call.id)
                         messages.append(Message("tool", outcome.text, tool_call_id=call.id, name=call.name))
                 if not final:
                     final = "I've set that in motion."

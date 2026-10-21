@@ -11,6 +11,7 @@ from typing import Any
 from tandem.engine import prompts
 from tandem.engine.builtin_tools import CHAT_ONLY
 from tandem.harness import HARNESSES, HarnessContext, TaskSpec, get_harness
+from tandem.telemetry import tracer
 from tandem.tools import GatedTools, ToolContext
 
 log = logging.getLogger("tandem.tasks")
@@ -51,7 +52,7 @@ class TaskManager:
         self.rt.store.add_message(
             "agent", f"Working on it: {task['title']}", {"type": "task", "ref": task["id"]}
         )
-        self._running[task["id"]] = asyncio.create_task(self._run(task))
+        self._running[task["id"]] = asyncio.create_task(self._run_traced(task))
         return task
 
     async def wait(self, task_id: str, timeout: float = 60) -> dict[str, Any]:
@@ -111,6 +112,21 @@ class TaskManager:
             rules=prompts.RULES,
             extra=cfg.persona,
         )
+
+    async def _run_traced(self, task: dict[str, Any]) -> None:
+        attrs = {
+            "tandem.task.harness": task["harness"],
+            "tandem.task.origin": task["origin"],
+            "tandem.task.title": task["title"],
+        }
+        with tracer().agent_span("task", task["id"], **attrs) as sp:
+            await self._run(task)
+            done = self.rt.store.get_task(task["id"]) or {}
+            if sp is not None:
+                sp.set("tandem.task.state", done.get("state"))
+                sp.set("tandem.task.steps", done.get("steps"))
+                if done.get("state") == "failed":
+                    sp.error(done.get("error") or "task failed")
 
     async def _run(self, task: dict[str, Any]) -> None:
         rt = self.rt

@@ -190,6 +190,17 @@ class ConnectorConfig(BaseModel):
         return dict(self.model_extra or {})
 
 
+class TelemetryConfig(BaseModel):
+    """OpenTelemetry GenAI traces over OTLP/HTTP JSON (SPEC §15.6). Off unless `enabled`."""
+
+    enabled: bool = False
+    endpoint: str | None = None  # e.g. http://localhost:4318/v1/traces; else OTEL_EXPORTER_OTLP_*ENDPOINT
+    headers_env: str | None = None  # env var holding "key=value,key2=value2" (e.g. an ingest token)
+    service_name: str = "tandem"
+    capture_content: bool = True  # prompts and tool I/O, redacted; needed for quality grading
+    team: str | None = None  # ambientq.team resource attribute
+
+
 class AppConfig(BaseModel):
     models: dict[str, ModelProfile] = Field(default_factory=dict)
     roles: dict[str, str] = Field(default_factory=dict)
@@ -200,6 +211,7 @@ class AppConfig(BaseModel):
     sandbox: SandboxConfig = Field(default_factory=SandboxConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     voice: VoiceConfig = Field(default_factory=VoiceConfig)
+    telemetry: TelemetryConfig = Field(default_factory=TelemetryConfig)
     policy: str | None = None  # path to policy.yaml; default examples/policy.yaml
     skills: list[str] = Field(default_factory=list)  # extra skill folders
     harness_options: dict[str, Any] = Field(

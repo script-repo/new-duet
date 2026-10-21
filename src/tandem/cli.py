@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import json
 import sys
+from pathlib import Path
 from typing import Any
 
 from tandem import __version__
@@ -160,6 +161,11 @@ def main(argv: list[str] | None = None) -> int:
         e.add_argument("--since", default="7d", help="how far back: 24h, 7d, ...")
         if kind == "export":
             e.add_argument("--out", help="file to write (default: stdout)")
+    hx = sub.add_parser("harness", help="the harness manifest quality tools grade (harness.yaml)")
+    hxsub = hx.add_subparsers(dest="harness_cmd", required=True)
+    he = hxsub.add_parser("export", help="write harness/tools.yaml, guardrails.yaml and agent.yaml")
+    he.add_argument("--root", default=".", help="repository root holding harness.yaml (default: .)")
+    he.add_argument("--check", action="store_true", help="write nothing; exit 1 if the files are stale")
     args = p.parse_args(argv)
 
     if args.cmd in (None, "serve"):
@@ -199,6 +205,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.cmd == "eval":
         return asyncio.run(_eval(args))
+    if args.cmd == "harness":
+        from tandem import quality
+
+        stale = quality.write(Path(args.root), check=args.check)
+        if args.check and stale:
+            print("stale, run `tandem harness export`: " + ", ".join(stale), file=sys.stderr)
+            return 1
+        print("\n".join(stale) if stale else "harness/ is up to date")
+        return 0
     result = asyncio.run(_once(args.cmd, getattr(args, "instructions", None), getattr(args, "harness", None)))
     print(json.dumps(result, indent=2, default=str))
     return 0
