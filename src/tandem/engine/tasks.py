@@ -84,9 +84,12 @@ class TaskManager:
         if not task:
             raise KeyError(task_id)
         running = self._running.get(task_id)
-        self.rt.approvals.cancel_for_task(task_id)
+        # Cancel the run before its approvals: resolving a pending approval first would let the task
+        # resume and finish in the gap.
         if running and not running.done():
             running.cancel()
+        self.rt.approvals.cancel_for_task(task_id)
+        if running and not running.done():
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await running
         task = self.rt.store.get_task(task_id)

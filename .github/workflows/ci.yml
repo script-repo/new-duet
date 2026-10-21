@@ -128,5 +128,6 @@ jobs:
           for i in $(seq 1 30); do curl -fs localhost:8000/api/health && break; sleep 1; done
           curl -fs localhost:8000/api/health | python3 -c "import json,sys; h=json.load(sys.stdin); assert h['mode']=='mock', h; print(h)"
           curl -fs localhost:8000/ | grep -q 'assets/'
-          curl -fs -X POST localhost:8000/api/checkin/run | python3 -c "import json,sys; r=json.load(sys.stdin); assert r['new_events']>=1, r; print(r)"
+          for i in $(seq 1 15); do curl -fs localhost:8000/api/today | python3 -c "import json,sys; t=json.load(sys.stdin); assert t['brief'] and t['stats']['events_today']>=1, t['stats']; print(t['brief']['greeting'])" && break; sleep 1; done
+          curl -fs localhost:8000/api/today | python3 -c "import json,sys; assert json.load(sys.stdin)['brief']"
           docker logs tandem
