@@ -6,7 +6,15 @@ from typing import Any
 
 from tandem.config import ConnectorConfig
 from tandem.connectors import calendar, fake, mail, mcp, simple  # noqa: F401 - register types
-from tandem.connectors.base import CONNECTOR_TYPES, CalendarItem, Connector, InboundEvent, register_connector
+from tandem.connectors.base import (
+    CONNECTOR_TYPES,
+    CalendarItem,
+    Connector,
+    InboundEvent,
+    PushRequest,
+    PushResult,
+    register_connector,
+)
 from tandem.util import Clock
 
 
@@ -36,6 +44,8 @@ __all__ = [
     "CalendarItem",
     "Connector",
     "InboundEvent",
+    "PushRequest",
+    "PushResult",
     "build_connectors",
     "register_connector",
 ]

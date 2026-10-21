@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     log_level: str = "info"
     cors_origins: str = ""
     autostart: bool = True  # run the scheduler loop inside `serve`
+    public_url: str | None = None  # how browsers and providers reach this server (OAuth, push callbacks)
+
+    @property
+    def base_url(self) -> str:
+        return (self.public_url or f"http://{self.host}:{self.port}").rstrip("/")
 
     @property
     def state_dir(self) -> Path:
@@ -121,8 +126,9 @@ class ScheduleConfig(BaseModel):
 
 
 class NotifyChannel(BaseModel):
-    type: Literal["ui", "ntfy", "webhook"] = "ui"
+    type: Literal["ui", "ntfy", "webhook", "webpush"] = "ui"
     url: str | None = None
+    when: Literal["always", "fallback"] = "always"  # fallback: only when no Web Push delivery succeeded
 
 
 class NotifyConfig(BaseModel):

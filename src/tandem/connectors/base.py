@@ -55,6 +55,26 @@ class CalendarItem:
         }
 
 
+@dataclass
+class PushRequest:
+    """What a webhook delivered: any body (possibly empty), lower-cased headers, query parameters."""
+
+    payload: dict[str, Any]
+    headers: dict[str, str]
+    raw: bytes = b""
+    query: dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class PushResult:
+    """New events, and optionally the exact HTTP answer a handshake needs (Slack challenge, Graph token)."""
+
+    events: list[InboundEvent] = field(default_factory=list)
+    status: int = 200
+    body: str | dict[str, Any] | None = None
+    content_type: str = "application/json"
+
+
 class Connector(ABC):  # noqa: B024 - every method has a sensible default
     type: ClassVar[str] = "base"
     send_tool: str | None = None  # a tool that can send a drafted reply (used by the brief)
@@ -87,6 +107,10 @@ class Connector(ABC):  # noqa: B024 - every method has a sensible default
         self, payload: dict[str, Any], headers: dict[str, str], raw: bytes = b""
     ) -> list[InboundEvent]:
         raise NotImplementedError(f"connector {self.name!r} does not accept webhooks")
+
+    async def handle_push(self, req: PushRequest) -> PushResult:
+        """Webhook entry point (SPEC §15.3). Override to answer handshakes; the default is v0.1's hook."""
+        return PushResult(await self.handle_webhook(req.payload, req.headers, req.raw))
 
     async def upcoming(self, start: datetime, end: datetime) -> list[CalendarItem]:
         return []

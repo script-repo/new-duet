@@ -37,6 +37,7 @@ from tandem.security import Redactor, SecretResolver
 from tandem.store import Store
 from tandem.tools import ApprovalService, ToolContext, ToolRegistry
 from tandem.util import Clock, iso
+from tandem.vault import Cipher, TokenVault, load_server_key
 
 log = logging.getLogger("tandem")
 
@@ -57,6 +58,8 @@ class Runtime:
         self.store = Store(self.settings.db_url, self.bus, self.clock)
         self.secrets = SecretResolver(env)
         self.redactor = Redactor(self.secrets)
+        self.cipher = Cipher(load_server_key(self.settings.state_dir, env))
+        self.vault = TokenVault(self.store, self.cipher, self.redactor)
         self.policy = Policy.load(policy_path(self.cfg))
         self.approvals = ApprovalService(self.store, self.policy)
         self.registry = ToolRegistry(self.store, self.policy, self.approvals, self.redactor)

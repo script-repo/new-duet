@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from tandem import __version__
+from tandem.connectors.base import PushRequest
 from tandem.connectors.simple import WebhookAuthError
 from tandem.runtime import Runtime
 
@@ -329,27 +330,34 @@ def create_app(rt: Runtime | None = None, run_scheduler: bool | None = None) -> 
 
     # ---- webhooks (own HMAC auth, no bearer) -------------------------------------------------------------------
     @app.post("/api/webhooks/{connector}")
-    async def webhook(connector: str, request: Request) -> dict[str, Any]:
+    async def webhook(connector: str, request: Request) -> Response:
         conn = runtime.connectors.get(connector)
         if conn is None:
             raise HTTPException(404, "no such connector")
         raw = await request.body()
-        try:
-            payload = json.loads(raw or b"{}")
-        except json.JSONDecodeError as exc:
-            raise HTTPException(400, "body must be JSON") from exc
+        payload: Any = {}
+        if raw.strip():
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise HTTPException(400, "body must be JSON") from exc
         if not isinstance(payload, dict):
             raise HTTPException(400, "body must be a JSON object")
+        req = PushRequest(
+            payload, {k.lower(): v for k, v in request.headers.items()}, raw, dict(request.query_params)
+        )
         try:
-            events = await conn.handle_webhook(
-                payload, {k.lower(): v for k, v in request.headers.items()}, raw
-            )
+            res = await conn.handle_push(req)
         except WebhookAuthError as exc:
             raise HTTPException(401, str(exc)) from exc
         except NotImplementedError as exc:
             raise HTTPException(400, str(exc)) from exc
-        result = await runtime.ingest(connector, events)
-        return {"accepted": len(events), **result}
+        result = await runtime.ingest(connector, res.events) if res.events else {}
+        if res.body is not None:
+            if isinstance(res.body, str):
+                return Response(res.body, status_code=res.status, media_type=res.content_type)
+            return JSONResponse(res.body, status_code=res.status)
+        return JSONResponse({"accepted": len(res.events), **result}, status_code=res.status)
 
     # ---- voice --------------------------------------------------------------------------------------------------
     @app.post("/api/voice/transcribe", dependencies=[api])

@@ -1,6 +1,6 @@
 # Tandem: specification
 
-Status: v0.1 design, 2026-10-21. Companion to [PLAN.md](PLAN.md).
+Status: v0.1 as built, v0.2 design in [§15](#15-v02-real-apps-real-phones-real-measurements), 2026-10-21. Companion to [PLAN.md](PLAN.md).
 
 ## 1. Overview
 
@@ -658,3 +658,152 @@ A comment ping is sent every 15 s. Clients reconnect and refetch `/api/thread` +
 
 No source code was copied from any of these projects; see `THIRD_PARTY_NOTICES.md` for the
 libraries Tandem depends on and their licenses.
+
+## 15. v0.2: real apps, real phones, real measurements
+
+v0.2 makes Tandem ready for a real inbox. It adds what v0.1 listed as limits and roadmap items 1 and 2,
+plus the means to measure it. Four workstreams, each behind a stable interface:
+
+| # | Workstream | Module(s) | Docs |
+|---|---|---|---|
+| 1 | Triage and brief evals with real models | `tandem.evals`, `examples/evals/` | [REAL-MODELS.md](REAL-MODELS.md) |
+| 2 | First-party OAuth connectors: Gmail, Google Calendar, Slack, Microsoft 365 | `tandem.vault`, `tandem.oauth`, `tandem.connectors.{google,slack,microsoft}` | [CONNECTORS.md](CONNECTORS.md) |
+| 3 | Web Push (VAPID) to the installed PWA | `tandem.push`, `frontend/public/sw.js` | [NOTIFICATIONS.md](NOTIFICATIONS.md) |
+| 4 | OpenTelemetry GenAI traces and the ambientq quality loop | `tandem.telemetry`, `harness/` | [QUALITY.md](QUALITY.md) |
+
+New dependency: `cryptography` (Apache-2.0/BSD) for token encryption, VAPID signing and Web Push
+payload encryption. Dev: `respx` (BSD) for recorded HTTP responses. No live network in any test.
+
+### 15.1 Server key and token vault (`tandem.vault`)
+
+- **Server key**: `TANDEM_SECRET_KEY` (a Fernet key: 32 url-safe base64 bytes), else generated once into
+  `<data>/secret.key` with mode `0600`. Losing it means reconnecting apps, nothing else.
+- **`credentials` table**: `name` pk (connector instance name), `provider`, `account` (email, workspace
+  name), `scopes` JSON, `token` (Fernet ciphertext of `{access_token, refresh_token, expires_at, ...}`),
+  `expires_at`, `status` (`ok`/`refresh_failed`/`revoked`), `created_at`, `updated_at`.
+- `TokenVault.save(name, provider, token_response, account)`, `.access_token(name)` (refreshes when it
+  expires within 120 s, with a per-name lock so concurrent tools refresh once), `.delete(name)`,
+  `.public(name)` (never any token). Every live token value is registered with the `Redactor`, so a token
+  echoed by an API into a tool result is masked before a model, a log or the UI sees it.
+- Tokens are used only inside connector code to set `Authorization` headers. Tools, prompts, tool
+  results, task logs, activity, audit and `/api/*` responses never carry them.
+
+### 15.2 OAuth 2.0 authorization code + PKCE (`tandem.oauth`)
+
+`OAuthProvider` describes one authorization server: `authorize_url`, `token_url`, `revoke_url`,
+default scopes, extra authorize params, and how to read the account from the token response. Built in:
+
+| Provider | Authorize / token | Notes |
+|---|---|---|
+| `google` | `accounts.google.com/o/oauth2/v2/auth` / `oauth2.googleapis.com/token` | `access_type=offline`, `prompt=consent`, `include_granted_scopes=true`; revoke at `oauth2.googleapis.com/revoke` |
+| `slack` | `slack.com/oauth/v2/authorize` / `slack.com/api/oauth.v2.access` | user-token scopes (`user_scope`), so Tandem reads and posts as the user; token rotation honoured when enabled |
+| `microsoft` | `login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize` / `.../token` | `offline_access` for refresh tokens; `tenant` defaults to `common` |
+
+Flow: `POST /api/connections/{name}/authorize` creates a random `state` (32 bytes) and a PKCE
+`code_verifier` (S256 challenge), stores both (verifier encrypted) for 10 minutes, and returns the
+provider URL. The browser goes there; the provider redirects to
+`{TANDEM_PUBLIC_URL}/api/oauth/callback?code&state`. The callback (no bearer auth: the single-use state is
+the CSRF guard) exchanges the code with the client secret and the verifier, stores the token in the vault,
+starts the connector (and its push subscription), and redirects to `/#/connections?connected={name}`.
+Client ids and secrets come from env vars named in the connector config
+(`client_id_env`, `client_secret_env`; defaults `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`,
+`SLACK_CLIENT_ID`/`SLACK_CLIENT_SECRET`, `MS_CLIENT_ID`/`MS_CLIENT_SECRET`). New setting
+`TANDEM_PUBLIC_URL` (default `http://{host}:{port}`) builds redirect and push callback URLs.
+
+### 15.3 Connectors
+
+| Type | Poll | Push | Events | Tools (prefix = instance name) |
+|---|---|---|---|---|
+| `gmail` | `users.history.list` from the stored `historyId` (first run: unread in the last day) | `users.watch` to a Pub/Sub topic; the push subscription posts to `/api/webhooks/{name}?token=…`; renewed daily | `email` | `_search`, `_read`, `_send`, `_reply` (send, reply: tag `send`) |
+| `google_calendar` | `events.list` with `syncToken` (410 → full resync) | `events.watch` channel with a secret token; renewed before expiry | `calendar` (new/changed/cancelled invites) | `_list`, `_create` (tag `send`: invites email attendees) |
+| `slack` | `conversations.history` on IMs, group DMs and configured channels since the last `ts` | Events API: `url_verification`, `X-Slack-Signature` v0 HMAC with the signing secret, 5-minute replay window | `chat` (DMs, mentions, channel messages) | `_search`, `_history`, `_post` (tags `send`, `external_post`) |
+| `m365` | Graph delta: `me/mailFolders/inbox/messages/delta`, `me/calendarView/delta` | Graph change notifications (`validationToken` echo, `clientState` check), renewed before expiry; a notification triggers a delta | `email`, `calendar` | `_search`, `_read`, `_send`, `_reply`, `_calendar_list`, `_calendar_create` |
+
+Push needs a public HTTPS `TANDEM_PUBLIC_URL`; without one the connector polls (`poll_every`, default 5
+minutes for OAuth connectors) and says so in its status. A webhook that arrives triggers an incremental
+poll, never trusts the payload's content, and is de-duplicated by `(source, external_id)` as before.
+
+The webhook route accepts any body (Graph validation and Calendar pushes are empty) and passes a
+`PushRequest {payload, headers, raw, query}` to `Connector.handle_push()`, which returns
+`PushResult {events, response?}` so a connector can answer a handshake (Slack `challenge`, Graph
+`validationToken`). The default `handle_push` calls v0.1's `handle_webhook`.
+
+Normalization keeps triage's signals: `List-Unsubscribe`/`Precedence` headers, labels/categories
+(`CATEGORY_PROMOTIONS` → bulk), importance, the thread id (for replies), attendees and response status,
+Slack channel type and mentions of the user.
+
+**API**
+
+| Method | Path | Returns |
+|---|---|---|
+| GET | `/api/connections` | `[{name, type, provider, display_name, configured, connected, account, scopes, expires_at, status, error, push: {mode: 'push'|'poll', detail}, last_poll, tools}]` plus the providers that are available to add |
+| POST | `/api/connections/{name}/authorize` | `{url}` |
+| GET | `/api/oauth/callback` | redirect to the UI |
+| DELETE | `/api/connections/{name}` | `{ok}`: revokes at the provider (best effort), stops push, deletes the token |
+
+Connections whose type is an OAuth connector and that are not in `tandem.yaml` are offered when their
+client id env var is set, so setting `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` is enough to show Connect
+buttons for Gmail and Calendar.
+
+### 15.4 Web Push (`tandem.push`)
+
+- **VAPID** (RFC 8292): a P-256 key pair from `TANDEM_VAPID_PRIVATE_KEY` (PEM or raw base64url), else
+  generated once and stored encrypted with the server key. `GET /api/push/vapid` → `{public_key, enabled}`.
+- **Subscriptions** table `push_subscriptions`: `id`, `endpoint` (unique), `p256dh`, `auth`, `label`
+  (from the user agent), `created_at`, `last_ok_at`, `last_error`, `failures`.
+  `POST /api/push/subscriptions` (the browser's `PushSubscription.toJSON()`), `DELETE
+  /api/push/subscriptions` `{endpoint}`, `GET /api/push/subscriptions`, `POST /api/push/test`.
+- **Sending**: payload encrypted with `aes128gcm` (RFC 8291/8188), `Authorization: vapid t=<ES256 JWT>,
+  k=<public key>`, `TTL` (24 h; 4 h for task updates), `Urgency` from Tandem urgency
+  (`low`→`low`, `normal`→`normal`, `high`/`critical`→`high`), `Topic` to collapse repeats. `404`/`410`
+  delete the subscription; other failures count up and drop it after 5 in a row.
+- **Payload**: `{title, body, urgency, url, tag, message_id?, approval_id?, actions}`. The service worker
+  shows it with actions **Approve** (only for approval cards whose tags are not `pay` or `delete`, posting
+  the decision with the session cookie) and **Open** (focus or open the thread at that card).
+- **Policy**: Web Push is a notify channel (`type: webpush`), on by default when a subscription exists.
+  It only carries what the notification policy already decided to push, so quiet hours, `min_urgency`
+  and the hourly cap apply unchanged. `ntfy` and `webhook` channels gain `when: always | fallback`;
+  `fallback` fires only when no Web Push delivery succeeded.
+- **Runtime settings**: `GET/PUT /api/settings/notify` `{min_urgency, quiet_hours, max_per_hour,
+  push_enabled}`: stored in `kv`, override `tandem.yaml`, applied at once.
+- **iOS**: Web Push works on iOS/iPadOS 16.4+ only for a PWA added to the Home Screen, and only after
+  a user gesture asks permission. Action buttons show on long-press/expand; Android and desktop show them inline.
+
+### 15.5 Evals (`tandem.evals`)
+
+- **Datasets** (`examples/evals/`): `triage.jsonl`, ~150 synthetic but realistic events (email,
+  calendar, Slack, payments, security, newsletters), each with a gold `label` (`ignore`, `brief`,
+  `notify`, `act`), a `reason`, and tags (`vip`, `money`, `deadline`, `bulk`, `injection`, ...);
+  `triage.meta.yaml` holds the persona and preferences (VIPs, mutes) the run seeds into memory;
+  `briefs.jsonl`, scenarios with `must_mention`, `must_not_mention` and `needs_you` expectations.
+- **`tandem eval triage --model SPEC`**: runs the real triage pipeline (rules, model, combine) on the
+  dataset. `SPEC` is a role (`triage`), a profile name from `tandem.yaml` (`cheap`), `provider/model`
+  (`anthropic/claude-haiku-5-5`, `openai_compatible/llama-3-1-8b` with `--base-url` and `--api-key-env`),
+  `mock`, or `noisy[:rate]` (a deterministic fake that perturbs the mock's answers, to test the metrics).
+  Reports accuracy, the 4×4 confusion matrix, per-label precision/recall/F1, precision/recall of
+  "interrupt" (notify+act), **missed urgent** (gold notify/act predicted ignore/brief, listed by id),
+  false alarms, latency and tokens. `--json PATH`, `--limit N`, `--fail-under ACC`.
+- **`tandem eval brief --model SPEC --judge SPEC`**: builds each scenario's brief with the real
+  `BriefBuilder` prompt and grades it with a second model on a 1-5 rubric (coverage, prioritization,
+  faithfulness, concision, actionability), plus deterministic coverage of `must_mention` and leaks of
+  `must_not_mention`.
+- Results are saved under `<data>/evals/` and the latest of each kind in `kv`; `GET /api/evals` returns
+  them; `POST /api/evals/triage/run` `{model}` runs one in the background (mock mode: instant).
+
+### 15.6 Telemetry and the quality loop (`tandem.telemetry`, `harness/`)
+
+- `telemetry: {enabled: false, endpoint, headers_env, service_name: tandem, capture_content: true}` in
+  `tandem.yaml` (or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`). Off by default. No OpenTelemetry SDK
+  dependency: a small tracer batches spans and posts OTLP/HTTP JSON in the background; export failures
+  are logged and dropped, never slowing the agent.
+- Spans follow the OpenTelemetry GenAI semantic conventions: one `invoke_agent` root per triage batch,
+  brief or task (`gen_ai.agent.name: tandem`, `gen_ai.conversation.id`, `tandem.run.kind`), a `chat
+  {model}` span per model call (`gen_ai.operation.name`, `gen_ai.provider.name`, `gen_ai.request.model`,
+  usage tokens, `gen_ai.system_instructions`, `gen_ai.input.messages`, `gen_ai.output.messages`), and an
+  `execute_tool {name}` span per tool call (`gen_ai.tool.name`, `gen_ai.tool.call.id`, arguments, result,
+  `error.type`, `tandem.approval.decision`). Content passes the `Redactor` first.
+- `harness/harness.yaml` describes Tandem to ambientq: the system prompts (moved from Python strings to
+  `src/tandem/prompts/*.md`, the single source of truth), `harness/tools.yaml` (generated by `tandem
+  harness export`, checked in CI), `harness/guardrails.yaml` (redaction patterns and approval policy as
+  rules) and `harness/agent.yaml`.
+- `docker compose --profile quality up` runs ambientq beside Tandem with telemetry pointed at it.

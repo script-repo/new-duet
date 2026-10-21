@@ -106,3 +106,27 @@ idea came from a specific project, SPEC.md says so in §14.
 | Missed events between check-ins | Webhooks for push sources, a short poll interval for cheap triage, and a catch-up window on each check-in |
 | Unsafe actions | Default-deny policy for send/pay/delete/post, deny on timeout, audit log, sandbox, secret redaction |
 | Docker not available (CI on macOS/Windows, laptops) | Local restricted sandbox fallback, chosen automatically |
+
+## 7. v0.2 plan
+
+v0.1 runs a scripted day offline. v0.2 is about a real week: real apps, real phones, real models, and
+numbers that say whether it works. Design in [SPEC §15](SPEC.md#15-v02-real-apps-real-phones-real-measurements).
+
+| # | Milestone | Done when |
+|---|---|---|
+| V1 | Plan and spec | this section and SPEC §15 on `main` |
+| V2 | Server key, vault, OAuth + PKCE | tokens encrypted at rest, refreshed, revoked; never in a tool result (tested) |
+| V3 | Connectors | Gmail, Google Calendar, Slack, Microsoft 365: poll, push, normalize, gated actions; recorded-HTTP tests; app registration docs |
+| V4 | Web Push | VAPID keys, subscriptions, aes128gcm sender, service worker actions, notify settings, fallback; tested against a fake push service |
+| V5 | Evals | 150-event labeled triage set, brief scenarios, `tandem eval triage|brief`, metrics verified with mock and noisy models, REAL-MODELS.md pilot plan |
+| V6 | Quality loop | GenAI-semconv OTLP traces, `harness/`, ambientq compose profile, mock traces → ambientq insights test |
+| V7 | UI | Connections page, notification settings, Evals page; screenshots |
+| V8 | Release | ruff, pytest, frontend tests and CI green; tag `v0.2.0` |
+
+Streams run in parallel on their own worktrees and branches (`v02-connectors`, `v02-push`, `v02-evals`,
+`v02-quality`), each with its own routes module and tables so merges stay small; the main session owns
+the shared seams (settings, runtime wiring, UI) and the merges.
+
+**What v0.2 still can't prove without credentials:** live OAuth consent screens, Pub/Sub and Graph push
+delivery to a public URL, real model accuracy, and iOS push on a device. REAL-MODELS.md and
+CONNECTORS.md describe how to check each one in a one-week pilot.
