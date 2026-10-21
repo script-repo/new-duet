@@ -40,17 +40,18 @@
     const result = oauthResult(splitHash(location.hash).params);
     if (!result) return;
     history.replaceState(null, '', `${location.pathname}${location.search}#/connections`);
+    const label = (name: string | null) => (name ? cards.find((c) => c.name === name)?.display_name ?? name : null);
     if (result.kind === 'connected') {
-      app.toast({ title: 'Connected', body: `${result.name} is connected. Its account and push status appear in a moment.`, urgency: 'normal', kind: 'info' });
+      app.toast({ title: `${label(result.name)} connected`, body: `Its account and push status appear in a moment.`, urgency: 'normal', kind: 'info' });
       refetchSoon(1500);
     } else {
-      app.toast({ title: result.name ? `Could not connect ${result.name}` : 'Could not connect', body: result.message, urgency: 'normal', kind: 'error' });
+      app.toast({ title: result.name ? `Could not connect ${label(result.name)}` : 'Could not connect', body: result.message, urgency: 'normal', kind: 'error' });
     }
   }
 
   $effect(() => {
-    handleCallback();
-    void load();
+    // load first so the toast can use the app's display name
+    void load().then(handleCallback);
     const onHash = () => handleCallback();
     window.addEventListener('hashchange', onHash);
     // account and push mode fill in a second after connecting; activity tells us something changed
@@ -88,9 +89,11 @@
         kind: 'info',
       });
       await load();
+      busy = null;
+      // the Disconnect button is gone: keep focus in the card
+      queueMicrotask(() => (document.querySelector(`[data-card="${CSS.escape(c.name)}"] button`) as HTMLElement | null)?.focus());
     } catch (e) {
       cardErrors = { ...cardErrors, [c.name]: errorMessage(e) };
-    } finally {
       busy = null;
     }
   }
@@ -144,7 +147,7 @@
     <ul class="cards" aria-label="Apps">
       {#each cards as c (c.type + c.name)}
         {@const d = c.state === 'connected' || c.state === 'reconnect' ? deliveryLabel(c.connection) : null}
-        <li class="card provider" class:connected={c.state === 'connected'}>
+        <li class="card provider" class:connected={c.state === 'connected'} data-card={c.name}>
           <div class="head">
             <ProviderMark type={c.type} provider={c.provider} name={c.display_name} />
             <div class="grow">
@@ -401,6 +404,11 @@
   }
   .nowrap {
     white-space: nowrap;
+  }
+  @media (max-width: 560px) {
+    .provider {
+      min-height: 0;
+    }
   }
   @media (max-width: 480px) {
     .hide-sm {

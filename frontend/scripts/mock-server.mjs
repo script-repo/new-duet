@@ -1,7 +1,9 @@
 // A tiny stand-in for the Tandem API (SPEC §10) to develop and screenshot the UI without the Python backend.
 // Serves the built app from ../src/tandem/server/static and fakes /api with demo data and a live SSE stream.
 // Run: npm run build && node scripts/mock-server.mjs [port]   (set TOKEN=... to exercise the sign-in screen)
+// v0.2: /api/connections (Connect goes through a fake consent page and back), push, notify settings, evals.
 import { createServer } from 'node:http';
+import { randomUUID } from 'node:crypto';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -82,9 +84,56 @@ msg('agent', 'The sheet is ready. Here is the email to Sam; nothing goes out unt
 act('tool', 'email_send → ask', 'Sends a message as you', 'info', 'tk_1', ago(18));
 act('error', 'IMAP poll failed', 'timeout after 30s; will retry next check-in', 'warn', null, ago(12));
 
+// ---- v0.2: connections, push, notify settings, evals ----
+const VAPID = 'BNQ7ryKYxFFPM1oybL5X2YRlGanA2LLrRKsYWq2htigl6Jz6bERhAgxpzOmwSrgVKmOYWYcb7szCXkLaawnNigc';
+const oauthConn = (name, type, provider, display_name, tools, scopes, over = {}) => ({
+  name, type, provider, display_name, oauth: true, configured: true, client_configured: true, connected: false, account: null,
+  scopes, expires_at: null, status: 'disconnected', error: null, last_poll: null, tools, push: { mode: 'poll', detail: 'not connected' }, ...over,
+});
+const connections = [
+  { name: 'demo', type: 'fake', provider: null, display_name: 'demo', oauth: false, configured: true, client_configured: true, connected: true, account: null, scopes: [], expires_at: null, status: 'ok', error: null, last_poll: ago(4), tools: ['email_search', 'email_read', 'email_send', 'payments_list', 'payments_pay'], push: { mode: 'poll', detail: '' } },
+  { name: 'inbox', type: 'webhook', provider: null, display_name: 'inbox', oauth: false, configured: true, client_configured: true, connected: true, account: null, scopes: [], expires_at: null, status: 'ok', error: null, last_poll: null, tools: [], push: { mode: 'push', detail: '' } },
+  { name: 'work', type: 'imap', provider: null, display_name: 'work', oauth: false, configured: true, client_configured: true, connected: false, account: null, scopes: [], expires_at: null, status: 'error', error: 'timeout after 30s', last_poll: ago(12), tools: ['work_search', 'work_read', 'work_send'], push: { mode: 'poll', detail: '' } },
+  oauthConn('gmail', 'gmail', 'google', 'Gmail', ['gmail_search', 'gmail_read', 'gmail_send', 'gmail_reply'], ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'], {
+    connected: true, status: 'ok', account: 'alex@harbor.example', last_poll: ago(3), expires_at: ahead(50), push: { mode: 'push', detail: 'Pub/Sub watch until Oct 28' },
+  }),
+  oauthConn('calendar', 'google_calendar', 'google', 'Google Calendar', ['calendar_list', 'calendar_create'], ['openid', 'email', 'https://www.googleapis.com/auth/calendar.events'], {
+    connected: false, status: 'error', account: 'alex@harbor.example', error: 'Token refresh failed: invalid_grant (access was revoked)', push: { mode: 'poll', detail: 'needs reconnect' },
+  }),
+  oauthConn('slack', 'slack', 'slack', 'Slack', ['slack_search', 'slack_history', 'slack_post'], ['im:history', 'chat:write'], { configured: false }),
+];
+const available = [
+  { type: 'gmail', provider: 'google', display_name: 'Gmail', default_name: 'gmail', env: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'], client_configured: true, in_use: true, docs: 'docs/CONNECTORS.md' },
+  { type: 'google_calendar', provider: 'google', display_name: 'Google Calendar', default_name: 'calendar', env: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'], client_configured: true, in_use: true, docs: 'docs/CONNECTORS.md' },
+  { type: 'm365', provider: 'microsoft', display_name: 'Microsoft 365', default_name: 'outlook', env: ['MS_CLIENT_ID', 'MS_CLIENT_SECRET'], client_configured: false, in_use: false, docs: 'docs/CONNECTORS.md' },
+  { type: 'slack', provider: 'slack', display_name: 'Slack', default_name: 'slack', env: ['SLACK_CLIENT_ID', 'SLACK_CLIENT_SECRET'], client_configured: true, in_use: true, docs: 'docs/CONNECTORS.md' },
+];
+let notifySettings = { min_urgency: 'high', quiet_hours: '21:00-07:00', max_per_hour: 4, push_enabled: true };
+let pushSubs = [
+  { id: 'push_ab12', host: 'web.push.apple.com', label: 'Safari on iPhone', created_at: ago(4000), last_ok_at: ago(95), last_error: null, failures: 0 },
+  { id: 'push_cd34', host: 'fcm.googleapis.com', label: 'Chrome on Windows', created_at: ago(9000), last_ok_at: ago(3000), last_error: '403 Forbidden (VAPID key changed?)', failures: 2 },
+];
+const evals = JSON.parse(readFileSync(new URL('./mock-evals.json', import.meta.url), 'utf8'));
+let evalRunning = false;
+function runEval(model) {
+  evalRunning = true;
+  setTimeout(() => {
+    evalRunning = false;
+    const t = structuredClone(evals.triage);
+    const jitter = model === 'noisy' ? -0.08 : 0.03;
+    t.model = model;
+    t.ran_at = now();
+    t.metrics.accuracy = Math.max(0, Math.min(1, +(t.metrics.accuracy + jitter).toFixed(4)));
+    evals.triage = t;
+    evals.history.unshift({ kind: 'triage', model, ran_at: t.ran_at, headline: t.metrics.accuracy, missed_urgent: t.metrics.missed_urgent });
+    act('eval', `Triage eval: ${Math.round(t.metrics.accuracy * 100)}% accurate (${model})`);
+    emit('eval.updated', { kind: 'triage' });
+  }, 2500);
+}
+
 const config = {
   mode: 'mock', timezone: 'America/Toronto',
-  models: { triage: { provider: 'mock', model: 'mock-cheap', has_api_key: false }, brief: { provider: 'anthropic', model: 'claude-opus-5-5', has_api_key: true }, chat: { provider: 'anthropic', model: 'claude-opus-5-5', has_api_key: true }, worker: { provider: 'openai_compatible', model: 'llama-3.1-70b', has_api_key: false } },
+  models: { triage: { name: 'cheap', provider: 'mock', model: 'mock-cheap', has_api_key: false }, brief: { name: 'strong', provider: 'anthropic', model: 'claude-opus-5-5', has_api_key: true }, chat: { name: 'strong', provider: 'anthropic', model: 'claude-opus-5-5', has_api_key: true }, worker: { name: 'local', provider: 'openai_compatible', model: 'llama-3.1-70b', has_api_key: false } },
   harnesses: [
     { name: 'builtin', display_name: 'Built-in', available: true, reason: null, default: true },
     { name: 'deepagents', display_name: 'LangChain Deep Agents', available: true, reason: null, default: false },
@@ -104,7 +153,7 @@ const config = {
     { match: { tags: ['delete'] }, action: 'ask' },
     { match: { tool: 'sandbox_exec', sandbox: 'local' }, action: 'ask', reason: 'Runs a command without container isolation' },
   ] },
-  schedule: { checkin_every: '15m', brief_at: '07:30' }, notify: { min_urgency: 'high' }, voice: { server: true }, auth: { required: !!TOKEN },
+  schedule: { checkin_every: '15m', brief_at: '07:30' }, notify: { min_urgency: 'high', push: { enabled: true, subscriptions: 0, vapid_public_key: VAPID } }, voice: { server: true }, auth: { required: !!TOKEN },
 };
 let memory = [
   { id: 'mm_1', kind: 'core', key: null, content: 'Runs a small design studio; works mostly mornings.', source: 'user', created_at: ago(9000), updated_at: ago(9000) },
@@ -279,6 +328,77 @@ createServer(async (req, res) => {
   if (p === '/api/skills') return send(res, 200, [{ name: 'cash-summary', description: 'One-page weekly cash summary as a sheet' }, { name: 'reply-drafts', description: 'Draft replies in the user\'s voice' }]);
   if (p === '/api/audit') return send(res, 200, audit);
   if (p === '/api/outbox') return send(res, 200, outbox);
+  if (p === '/api/connections' && req.method === 'GET') {
+    return send(res, 200, { connections, available, redirect_uri: `http://127.0.0.1:${PORT}/api/oauth/callback`, public_url: `http://127.0.0.1:${PORT}`, push_capable: false });
+  }
+  if ((r = m(/^\/api\/connections\/([^/]+)\/authorize$/)) && req.method === 'POST') {
+    const name = decodeURIComponent(r[1]);
+    const a = available.find((x) => x.default_name === name);
+    if (a && !a.client_configured) return send(res, 400, { detail: `Set ${a.env.join(' and ')} to connect ${a.display_name}` });
+    if (!a && !connections.some((c) => c.name === name && c.oauth)) return send(res, 400, { detail: 'no such connector' });
+    // stands in for the provider's consent screen: straight back with ?connected=
+    return send(res, 200, { url: `/api/oauth/mock?name=${encodeURIComponent(name)}` });
+  }
+  if (p === '/api/oauth/mock') {
+    const name = url.searchParams.get('name');
+    let c = connections.find((x) => x.name === name);
+    if (!c) {
+      const a = available.find((x) => x.default_name === name);
+      c = oauthConn(name, a.type, a.provider, a.display_name, [`${name}_search`], []);
+      connections.push(c);
+    }
+    Object.assign(c, { connected: true, status: 'ok', error: null, last_poll: null, push: { mode: 'poll', detail: 'connecting…' } });
+    setTimeout(() => {
+      Object.assign(c, { account: 'alex@harbor.example', last_poll: now(), push: { mode: 'poll', detail: 'no public HTTPS URL; polled each check-in' } });
+      act('connector', `${c.display_name} connected`, 'alex@harbor.example');
+    }, 1200);
+    res.writeHead(302, { Location: `/#/connections?connected=${encodeURIComponent(name)}` });
+    return res.end();
+  }
+  if ((r = m(/^\/api\/connections\/([^/]+)$/)) && req.method === 'DELETE') {
+    const c = connections.find((x) => x.name === decodeURIComponent(r[1]));
+    if (!c) return send(res, 404, { detail: 'no such connector' });
+    Object.assign(c, { connected: false, status: 'disconnected', account: null, error: null, push: { mode: 'poll', detail: 'not connected' } });
+    return send(res, 200, { ok: true, revoked: c.provider !== 'microsoft' });
+  }
+  if (p === '/api/push/vapid') return send(res, 200, { public_key: VAPID, enabled: true });
+  if (p === '/api/push/subscriptions' && req.method === 'GET') return send(res, 200, pushSubs);
+  if (p === '/api/push/subscriptions' && req.method === 'POST') {
+    const b = await readBody(req);
+    if (!String(b.endpoint || '').startsWith('https://')) return send(res, 422, { detail: 'endpoint must be https' });
+    const s = { id: 'push_' + randomUUID().slice(0, 8), host: new URL(b.endpoint).host, label: 'This browser', created_at: now(), last_ok_at: null, last_error: null, failures: 0 };
+    pushSubs.push(s);
+    return send(res, 200, s);
+  }
+  if (p === '/api/push/subscriptions' && req.method === 'DELETE') {
+    const b = await readBody(req);
+    pushSubs = pushSubs.filter((x) => x.id !== b.id);
+    return send(res, 200, { ok: true });
+  }
+  if (p === '/api/push/test' && req.method === 'POST') {
+    if (!notifySettings.push_enabled || !pushSubs.length) return send(res, 409, { detail: notifySettings.push_enabled ? 'no device has turned on push' : 'push is turned off' });
+    const ok = pushSubs.filter((x) => !x.last_error);
+    for (const x of ok) x.last_ok_at = now();
+    return send(res, 200, { delivered: ok.length, subscriptions: pushSubs.length });
+  }
+  if (p === '/api/settings/notify' && req.method === 'GET') return send(res, 200, notifySettings);
+  if (p === '/api/settings/notify' && req.method === 'PUT') {
+    const b = await readBody(req);
+    if ('min_urgency' in b && !['low', 'normal', 'high', 'critical'].includes(b.min_urgency)) return send(res, 422, { detail: 'min_urgency must be low, normal, high or critical' });
+    if ('quiet_hours' in b && b.quiet_hours !== null && !/^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(b.quiet_hours)) return send(res, 422, { detail: 'quiet_hours must be HH:MM-HH:MM' });
+    if ('max_per_hour' in b && !(Number.isInteger(b.max_per_hour) && b.max_per_hour >= 1)) return send(res, 422, { detail: 'max_per_hour must be a positive integer' });
+    notifySettings = { ...notifySettings, ...b };
+    return send(res, 200, notifySettings);
+  }
+  if (p === '/api/evals') return send(res, 200, { ...evals, running: evalRunning ? ['triage'] : [] });
+  if (p === '/api/evals/triage/run' && req.method === 'POST') {
+    const { model = 'triage' } = await readBody(req);
+    const allowed = ['triage', 'brief', 'chat', 'worker', 'cheap', 'strong', 'local', 'mock', 'noisy'];
+    if (!allowed.includes(model)) return send(res, 400, { detail: `model must be one of ${allowed.join(', ')}` });
+    if (evalRunning) return send(res, 409, { detail: 'a triage eval is already running' });
+    runEval(model);
+    return send(res, 202, { started: true, model });
+  }
   if (p === '/api/voice/transcribe') return send(res, 200, { text: 'Remind me to call Sam at four.' });
   send(res, 404, { detail: 'Not found' });
 }).listen(PORT, '127.0.0.1', () => console.log(`mock Tandem API on http://127.0.0.1:${PORT}`));
