@@ -204,8 +204,8 @@ Two tiers (idea from Letta/MemGPT):
 
 - **Core memory**: short entries of kind `core` (who the user is) and `preference` (how they want
   things), always rendered into every prompt, capped at `memory.core_chars` (default 2,000).
-- **Archive**: entries of kind `fact`, `thread_summary`, `note`; searched with SQLite FTS5 when
-  available, else term-overlap scoring.
+- **Archive**: entries of kind `fact`, `thread_summary`, `note`; searched by term-overlap scoring
+  (portable across SQLite and Postgres; FTS/embeddings are on the roadmap).
 - Tools: `memory_search(query, k)`, `memory_write(content, kind, key?)` (same key replaces),
   `memory_forget(id)`.
 - **Thread memory**: the last `memory.thread_window` messages go into the chat context; older ones
@@ -385,9 +385,9 @@ class Harness(ABC):
 | Harness | `name` | Requires | How tools are exposed | Steering |
 |---|---|---|---|---|
 | Built-in | `builtin` | nothing | native `ToolSpec`s to `ModelClient` | queue checked each step |
-| LangChain Deep Agents | `deepagents` | extra `[deepagents]` | each gated tool wrapped as a LangChain `StructuredTool`; model via `init_chat_model` from the profile; MCP via `langchain-mcp-adapters` | via a pre-model hook reading the queue |
+| LangChain Deep Agents | `deepagents` | extra `[deepagents]` | each gated tool wrapped as a LangChain `StructuredTool`; model via `init_chat_model` from the profile; MCP via `langchain-mcp-adapters` | between turns (queued notes are added as a new user turn) |
 | Claude Agent SDK | `claude-sdk` | extra `[claude-sdk]` + Claude Code runtime | tools served as an in-process SDK MCP server (`create_sdk_mcp_server`); built-in file/shell tools restricted to the sandbox `cwd`; `can_use_tool` routes the SDK's own tools through the gate | new query turn |
-| OpenAI Agents SDK | `openai-agents` | extra `[openai-agents]` | each gated tool wrapped as a `FunctionTool`; OpenAI-compatible profiles via `OpenAIChatCompletionsModel` | between turns |
+| OpenAI Agents SDK | `openai-agents` | extra `[openai-agents]` | each gated tool wrapped as a `FunctionTool`; OpenAI profiles use the SDK's own client; every other provider (and mock mode) goes through `ChatCompletionsBridge`, an in-process httpx transport that serves `/chat/completions` from any Tandem `ModelClient` | between turns |
 | CLI coding agent | `cli` | `claude` or `codex` on PATH | none: the CLI works inside the sandbox directory; the run itself is the gated tool `cli_run` (tag `exec`) | not supported (stop only) |
 
 **Adding a harness:** subclass `Harness`, implement `availability()` (import lazily, return a
@@ -525,7 +525,7 @@ and a countdown. Decisions: **approve**, **edit** (change `editable` args, then 
 | GET | `/api/health` | | `{ok, version, mode}` |
 | GET | `/api/config` | | `{mode, timezone, models:{role:{provider,model,has_api_key}}, harnesses:[{name,display_name,available,reason,default}], connectors:[{name,type,status,tools}], policy:{default,timeout_s,rules}, schedule, notify, voice:{server}, auth}` |
 | POST | `/api/auth/login` | `{token}` | sets cookie |
-| GET | `/api/thread?limit=&before=` | | `{messages, approvals:{id:Approval}, tasks:{id:Task}, artifacts:{id:Artifact}, briefs:{id:Brief}}` |
+| GET | `/api/thread?limit=&before=` (`before`: message id; returns ids `< before`) | | `{messages, approvals:{id:Approval}, tasks:{id:Task}, artifacts:{id:Artifact}, briefs:{id:Brief}}` |
 | POST | `/api/thread` | `{text, harness?}` | `{message}`; the reply streams over SSE |
 | GET | `/api/stream` | | SSE (§10.3) |
 | GET | `/api/approvals?state=` | | `[Approval]` |
@@ -535,7 +535,7 @@ and a countdown. Decisions: **approve**, **edit** (change `editable` args, then 
 | GET | `/api/tasks/{id}` | | `Task & {logs:[TaskLog]}` |
 | POST | `/api/tasks/{id}/steer` | `{text}` | `Task` |
 | POST | `/api/tasks/{id}/stop` | | `Task` |
-| GET | `/api/activity?limit=&before=` | | `[Activity]` |
+| GET | `/api/activity?limit=&before=` (ids `< before`) | | `[Activity]` |
 | GET | `/api/today` | | `{date, brief, needs_you:[Approval], in_progress:[Task], done:[Task], upcoming:[CalendarItem], notifications:[Event], stats:{events_today, ignored, notified, tasks_done}}` |
 | POST | `/api/brief/run` | | `Brief` |
 | POST | `/api/checkin/run` | | `{new_events, notified, ignored}` |
@@ -549,7 +549,7 @@ and a countdown. Decisions: **approve**, **edit** (change `editable` args, then 
 | DELETE | `/api/memory/{id}` | | `{ok}` |
 | GET | `/api/skills` | | `[{name, description}]` |
 | GET | `/api/audit?limit=` | | `[Audit]` |
-| GET | `/api/outbox` | | messages and payments the fake connectors "sent" (mock mode) |
+| GET | `/api/outbox` | | `[{connector, type: 'email'|'calendar'|'payment', ...fields}]`: what the fake connectors "sent" (mock mode) |
 | POST | `/api/webhooks/{connector}` | any JSON | `{accepted}` |
 | POST | `/api/voice/transcribe` | multipart `file` | `{text}` |
 
@@ -568,8 +568,13 @@ type TaskLog  = { id: number; task_id: string; ts: string; kind: 'info'|'thought
 type Activity = { id: number; ts: string; kind: string; title: string; detail: string|null; task_id: string|null; level: 'info'|'notify'|'warn'|'error' };
 type Artifact = { id: string; task_id: string|null; kind: 'md'|'html'|'docx'|'xlsx'|'pptx'|string; title: string; filename: string; size: number; created_at: string };
 type Brief    = { id: string; date: string; greeting: string; items: { topic: string; summary: string; needs_you: boolean; approval_id?: string }[]; created_at: string };
-type Event    = { id: string; source: string; kind: string; title: string; sender: string|null; occurred_at: string; status: string; urgency: string; triage: { reason?: string }|null };
+type Event    = { id: string; source: string; kind: string; title: string; sender: string|null; occurred_at: string; status: 'new'|'ignored'|'notified'|'brief'|'briefed'|'acted'; urgency: string; triage: { reason?: string }|null };
+type CalendarItem = { title: string; start: string; end: string|null; location: string|null; attendees: string[]; source: string };
 ```
+
+When a task finishes, the thread gets one agent message with the summary; each deliverable rides on
+it (and on any further messages) as an `artifact` card. The live `task` card posted at start also
+embeds the task's artifacts, and `/api/thread` includes them in `artifacts`.
 
 ### 10.3 SSE events
 

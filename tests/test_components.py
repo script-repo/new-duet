@@ -395,7 +395,7 @@ def test_scheduler_due():
 
 
 def test_config_loading(tmp_path, monkeypatch):
-    for k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
+    for k in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "TANDEM_MOCK"):
         monkeypatch.delenv(k, raising=False)
     cfg = load_config(Settings(data_dir=tmp_path))
     assert cfg.mock and [c.type for c in cfg.connectors] == ["fake", "webhook"] and cfg.demo_autoplay

@@ -76,6 +76,12 @@ def main(argv: list[str] | None = None) -> int:
             f"Tandem {__version__} ({'mock' if rt.cfg.mock else 'live'} mode) on http://{host}:{port}",
             file=sys.stderr,
         )
+        if host not in ("127.0.0.1", "localhost", "::1") and not settings.auth_token:
+            print(
+                "WARNING: listening beyond localhost with no TANDEM_AUTH_TOKEN; anyone who can reach this "
+                "port can use your assistant.",
+                file=sys.stderr,
+            )
         kwargs: dict[str, Any] = {"log_level": settings.log_level}
         if getattr(args, "forwarded_allow_ips", None):
             kwargs["forwarded_allow_ips"] = args.forwarded_allow_ips

@@ -1,0 +1,41 @@
+# Single host: Tandem + SQLite on a volume.
+#   cp .env.example .env   # add provider keys, or leave them out for mock mode
+#   docker compose up -d   # then open http://localhost:8000
+# With Postgres instead of SQLite:
+#   TANDEM_DATABASE_URL=postgresql+psycopg://tandem:tandem@postgres:5432/tandem \
+#     docker compose --profile postgres up -d
+services:
+  tandem:
+    build: .
+    image: tandem:local
+    ports: ["127.0.0.1:8000:8000"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      TANDEM_DATA_DIR: /data
+      TANDEM_DATABASE_URL: ${TANDEM_DATABASE_URL:-}
+    volumes:
+      - tandem-data:/data
+      # Mount your own config and policy:
+      # - ./tandem.yaml:/app/tandem.yaml:ro
+    restart: unless-stopped
+
+  postgres:
+    profiles: [postgres]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: tandem
+      POSTGRES_PASSWORD: tandem
+      POSTGRES_DB: tandem
+    volumes:
+      - tandem-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tandem"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  tandem-data:
+  tandem-pg:

@@ -140,7 +140,7 @@ async def test_openai_json_mode_and_token_param(monkeypatch):
 
 
 async def test_gemini_wire_format(monkeypatch):
-    monkeypatch.setenv("GKEY", "AIzaFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE12")
+    monkeypatch.setenv("GKEY", "AIza-test-not-a-key")
 
     def handler(req, n):
         body = json.loads(req.content)

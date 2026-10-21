@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import AsyncIterator, Callable
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,8 @@ from tandem.runtime import Runtime
 from tandem.util import FakeClock
 
 TZ = "America/Toronto"
+# CI's postgres job points this at a real server; each runtime starts from empty tables.
+TEST_DB = os.environ.get("TANDEM_TEST_DATABASE_URL")
 
 
 def local(hh: int, mm: int = 0, day: int = 21) -> datetime:
@@ -44,9 +47,17 @@ def make_rt(tmp_path: Path) -> Callable[..., Runtime]:
         env: dict[str, str] | None = None,
         **kw: Any,
     ) -> Runtime:
+        if TEST_DB:
+            from sqlalchemy import create_engine
+
+            from tandem.store import metadata
+
+            engine = create_engine(TEST_DB)
+            metadata.drop_all(engine)
+            engine.dispose()
         settings = Settings(
             data_dir=tmp_path / "data",
-            database_url=f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}",
+            database_url=TEST_DB or f"sqlite:///{(tmp_path / 'db.sqlite').as_posix()}",
             mock=False,
             autostart=False,
             **kw,
