@@ -16,3 +16,5 @@ frontend/dist/
 src/tandem/server/static/*
 !src/tandem/server/static/.gitkeep
 tandem.yaml
+.DS_Store
+*.log
