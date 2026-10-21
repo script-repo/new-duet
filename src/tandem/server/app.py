@@ -148,6 +148,9 @@ def create_app(rt: Runtime | None = None, run_scheduler: bool | None = None) -> 
                 obj = s.get_task(ref)
                 if obj:
                     out["tasks"][ref] = obj
+                    for aid in obj.get("artifact_ids", []):
+                        if art := s.get_artifact(aid):
+                            out["artifacts"][aid] = art
             elif kind == "artifact":
                 obj = s.get_artifact(ref)
                 if obj:

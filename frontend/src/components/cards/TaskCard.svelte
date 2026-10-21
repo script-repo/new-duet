@@ -125,6 +125,7 @@
   }
   .artifacts {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
     margin-top: 12px;
   }

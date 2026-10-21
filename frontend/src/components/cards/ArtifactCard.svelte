@@ -29,6 +29,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    min-width: 0;
     padding: 12px 14px;
   }
   .compact {

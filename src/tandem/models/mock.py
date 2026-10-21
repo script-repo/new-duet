@@ -316,7 +316,7 @@ class MockModel(ModelClient):
             isinstance(v, str) and ("rejected" in v.lower() or "blocked" in v.lower())
             for v in results.values()
         )
-        summary = "Finished: " + _short(instructions, 90)
+        summary = "Finished: " + _short(instructions, 90).rstrip(".?! ")
         if made:
             summary += ". The deliverable is attached"
         if any(k.endswith("_send") for k in results):

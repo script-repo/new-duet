@@ -206,11 +206,16 @@ class Runtime:
             if ok
             else f"I couldn't finish “{task['title']}”: {task.get('error') or ''}"
         )
-        msg = self.store.add_message("agent", text, {"type": "task", "ref": task["id"]})
-        for aid in task.get("artifact_ids", []):
-            art = self.store.get_artifact(aid)
-            if art:
-                self.store.add_message("agent", art["title"], {"type": "artifact", "ref": aid})
+        # The live task card posted at start already shows state and logs; the done message carries the
+        # summary and each deliverable as its own card.
+        arts = (
+            [a for aid in task.get("artifact_ids", []) if (a := self.store.get_artifact(aid))] if ok else []
+        )
+        msg = self.store.add_message(
+            "agent", text, {"type": "artifact", "ref": arts[0]["id"]} if arts else None
+        )
+        for art in arts[1:]:
+            self.store.add_message("agent", art["title"], {"type": "artifact", "ref": art["id"]})
         if not self.notify_policy.quiet_now(self.clock.now()):
             await self.notifier.push("Done" if ok else "Task failed", task["title"], "normal", msg["id"])
 

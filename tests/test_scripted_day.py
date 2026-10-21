@@ -96,6 +96,7 @@ async def test_scripted_day(make_rt):
             m for m in rt.store.list_messages(limit=100) if m["card"] and m["card"]["ref"] == art["id"]
         ]
         assert done_cards and done_cards[0]["card"]["type"] == "artifact"
+        assert done_cards[0]["text"] == done["summary"]
 
         # Silence never approves: the brief's draft expires and is denied.
         clock.set(local(9, 15) + timedelta(seconds=rt.policy.timeout_s + 60))
