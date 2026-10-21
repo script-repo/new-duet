@@ -51,6 +51,20 @@ connectors:
   #   args: ["-y", "@modelcontextprotocol/server-github"]
   #   env_from: [GITHUB_PERSONAL_ACCESS_TOKEN]
   # - {type: fake, name: demo}     # seeded demo data
+  # First-party OAuth connectors (docs/CONNECTORS.md). Setting GOOGLE_CLIENT_ID/SECRET, SLACK_CLIENT_ID/SECRET
+  # or MS_CLIENT_ID/SECRET is enough to offer them on the Connections screen; list them here to name or tune them.
+  # - type: gmail
+  #   name: gmail              # gmail_search, gmail_read, gmail_send, gmail_reply
+  #   pubsub_topic: projects/my-project/topics/tandem-gmail   # push (needs an https TANDEM_PUBLIC_URL)
+  #   push_token_env: GMAIL_PUSH_TOKEN
+  # - {type: google_calendar, name: calendar, calendar_id: primary}   # calendar_list, calendar_create
+  # - type: slack
+  #   name: slack              # slack_search, slack_history, slack_post
+  #   channels: [general]      # watched besides DMs and group DMs
+  #   signing_secret_env: SLACK_SIGNING_SECRET
+  # - type: m365
+  #   name: outlook            # outlook_search/read/send/reply, outlook_calendar_list/create
+  #   tenant: common
 
 sandbox:
   mode: auto                # docker if available, else a restricted local folder

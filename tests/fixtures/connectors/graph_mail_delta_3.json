@@ -1,0 +1,27 @@
+{
+  "value": [
+    {
+      "id": "AAM3",
+      "subject": "Re: offsite",
+      "isRead": false,
+      "receivedDateTime": "2026-10-21T13:20:00Z",
+      "inferenceClassification": "focused",
+      "from": {
+        "emailAddress": {
+          "address": "lee@example.org"
+        }
+      },
+      "body": {
+        "contentType": "text",
+        "content": "Friday works."
+      }
+    },
+    {
+      "id": "AAM1",
+      "@removed": {
+        "reason": "deleted"
+      }
+    }
+  ],
+  "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=mail-d2"
+}

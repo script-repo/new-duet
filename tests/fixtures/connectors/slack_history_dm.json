@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "user": "U01",
+      "text": "on it",
+      "ts": "1792328500.000200"
+    },
+    {
+      "type": "message",
+      "user": "U02",
+      "text": "Can you send the deck before 3?",
+      "ts": "1792328400.000100"
+    }
+  ]
+}

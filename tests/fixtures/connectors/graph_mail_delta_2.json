@@ -1,0 +1,32 @@
+{
+  "value": [
+    {
+      "id": "AAM2",
+      "subject": "Weekly digest",
+      "isRead": false,
+      "receivedDateTime": "2026-10-21T11:00:00Z",
+      "inferenceClassification": "other",
+      "from": {
+        "emailAddress": {
+          "address": "digest@news.example"
+        }
+      },
+      "body": {
+        "contentType": "text",
+        "content": "This week..."
+      }
+    },
+    {
+      "id": "AAM0",
+      "subject": "Already read",
+      "isRead": true,
+      "receivedDateTime": "2026-10-21T10:00:00Z",
+      "from": {
+        "emailAddress": {
+          "address": "x@example.com"
+        }
+      }
+    }
+  ],
+  "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=mail-d1"
+}

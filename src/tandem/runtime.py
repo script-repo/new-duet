@@ -19,6 +19,7 @@ from tandem.config import AppConfig, Settings, examples_dir, load_config, policy
 from tandem.connectors import Connector, build_connectors
 from tandem.connectors.base import InboundEvent
 from tandem.connectors.fake import FakeConnector
+from tandem.connectors.oauth_base import oauth_offers
 from tandem.engine.brief import BriefBuilder
 from tandem.engine.builtin_tools import builtin_tools
 from tandem.engine.chat import ChatAgent
@@ -75,10 +76,16 @@ class Runtime:
         self.artifacts = Artifacts(self.store, self.settings.state_dir / "artifacts")
         self.sandboxes = SandboxFactory(self.settings.state_dir / "sandboxes", self.cfg.sandbox)
         self.connectors: dict[str, Connector] = build_connectors(
-            self.cfg.connectors, self.clock, self.secrets, self.cfg.schedule.timezone
+            self.cfg.connectors + oauth_offers(self.cfg.connectors, self.secrets),
+            self.clock,
+            self.secrets,
+            self.cfg.schedule.timezone,
         )
         apply_notify_settings(self.cfg.notify, self.store.kv_get("notify_settings") or {})
         self.push = PushService(self, env)
+        for c in self.connectors.values():
+            if hasattr(c, "bind"):
+                c.bind(self)  # OAuth connectors: vault, cipher, store, public URL
         self.notify_policy = NotificationPolicy(self.cfg.notify, self.cfg.schedule.timezone, self.store)
         self.notifier = Notifier(self.cfg.notify, self.store, self.push)
         self.triage = Triage(self)

@@ -714,14 +714,23 @@ Client ids and secrets come from env vars named in the connector config
 
 | Type | Poll | Push | Events | Tools (prefix = instance name) |
 |---|---|---|---|---|
-| `gmail` | `users.history.list` from the stored `historyId` (first run: unread in the last day) | `users.watch` to a Pub/Sub topic; the push subscription posts to `/api/webhooks/{name}?token=…`; renewed daily | `email` | `_search`, `_read`, `_send`, `_reply` (send, reply: tag `send`) |
-| `google_calendar` | `events.list` with `syncToken` (410 → full resync) | `events.watch` channel with a secret token; renewed before expiry | `calendar` (new/changed/cancelled invites) | `_list`, `_create` (tag `send`: invites email attendees) |
-| `slack` | `conversations.history` on IMs, group DMs and configured channels since the last `ts` | Events API: `url_verification`, `X-Slack-Signature` v0 HMAC with the signing secret, 5-minute replay window | `chat` (DMs, mentions, channel messages) | `_search`, `_history`, `_post` (tags `send`, `external_post`) |
-| `m365` | Graph delta: `me/mailFolders/inbox/messages/delta`, `me/calendarView/delta` | Graph change notifications (`validationToken` echo, `clientState` check), renewed before expiry; a notification triggers a delta | `email`, `calendar` | `_search`, `_read`, `_send`, `_reply`, `_calendar_list`, `_calendar_create` |
+| `gmail` | `users.history.list` from the stored `historyId` (first run, or 404: unread inbox mail from the last day) | `users.watch` to `pubsub_topic`; the push subscription posts to `/api/webhooks/{name}?token=…` (token from `push_token_env`, else generated and stored encrypted); renewed daily | `email` | `_search`, `_read`, `_send`, `_reply` (send, reply: tag `send`) |
+| `google_calendar` | `events.list` with `syncToken`; the first sync is a baseline (no events); 410 → full resync that keeps only events updated since the last sync | `events.watch` channel with a secret token; renewed before expiry | `calendar` (new/changed/cancelled invites) | `_list`, `_create` (tag `send`: invites email attendees) |
+| `slack` | `conversations.history` on IMs, group DMs and configured `channels` since each one's last `ts` (first run: last day); a pushed event in another channel adds that channel | Events API: `url_verification`, `X-Slack-Signature` v0 HMAC with the signing secret, 5-minute replay window | `chat` (DMs, mentions, channel messages) | `_search`, `_history`, `_post` (tags `send`, `external_post`) |
+| `m365` | Graph delta: `me/mailFolders/inbox/messages/delta` (first run: unread from the last day), `me/calendarView/delta` (next 30 days; first run is a baseline); 410 → new delta | Graph change notifications (`validationToken` echo, `clientState` check), renewed before expiry; a notification triggers a delta | `email`, `calendar` | `_search`, `_read`, `_send`, `_reply`, `_calendar_list`, `_calendar_create` |
+
+Modules: `tandem.oauth`, `tandem.connectors.oauth_base` (`OAuthConnector`: tokens via the vault, an
+`_api` helper that retries once after a forced refresh on 401, cursors in `kv` under
+`connector:<name>:…`, push bookkeeping, status), `tandem.connectors.{google,slack,microsoft}`. The Runtime
+calls `bind(rt)` on each OAuth connector before `start()`. Tools are listed even when not connected and
+then answer "connect X first"; a not-connected connector's poll returns nothing.
 
 Push needs a public HTTPS `TANDEM_PUBLIC_URL`; without one the connector polls (`poll_every`, default 5
-minutes for OAuth connectors) and says so in its status. A webhook that arrives triggers an incremental
-poll, never trusts the payload's content, and is de-duplicated by `(source, external_id)` as before.
+minutes for OAuth connectors; in practice each check-in) and says so in its status. A webhook that
+arrives is verified, answered at once (`202` for Graph) and triggers an incremental poll in the
+background; the payload's content is never trusted, and events are de-duplicated by
+`(source, external_id)` as before. Push channels are renewed a day before they expire, on check-in.
+Microsoft has no token revocation endpoint, so disconnecting it only deletes Tandem's copy.
 
 The webhook route accepts any body (Graph validation and Calendar pushes are empty) and passes a
 `PushRequest {payload, headers, raw, query}` to `Connector.handle_push()`, which returns
@@ -729,21 +738,22 @@ The webhook route accepts any body (Graph validation and Calendar pushes are emp
 `validationToken`). The default `handle_push` calls v0.1's `handle_webhook`.
 
 Normalization keeps triage's signals: `List-Unsubscribe`/`Precedence` headers, labels/categories
-(`CATEGORY_PROMOTIONS` → bulk), importance, the thread id (for replies), attendees and response status,
+(`data.labels` with `CATEGORY_PROMOTIONS`/`CATEGORY_SOCIAL`, or Graph `inferenceClassification: other` → bulk in `apply_rules`), importance, the thread id (for replies), attendees and response status,
 Slack channel type and mentions of the user.
 
 **API**
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/api/connections` | `[{name, type, provider, display_name, configured, connected, account, scopes, expires_at, status, error, push: {mode: 'push'|'poll', detail}, last_poll, tools}]` plus the providers that are available to add |
+| GET | `/api/connections` | `{connections: [{name, type, provider, display_name, oauth, configured, client_configured, connected, account, scopes, expires_at, status, error, push: {mode: 'push'|'poll', detail}, last_poll, tools}], available: [{type, provider, display_name, default_name, env, client_configured, in_use, docs}], redirect_uri, public_url, push_capable}` |
 | POST | `/api/connections/{name}/authorize` | `{url}` |
 | GET | `/api/oauth/callback` | redirect to the UI |
 | DELETE | `/api/connections/{name}` | `{ok}`: revokes at the provider (best effort), stops push, deletes the token |
 
 Connections whose type is an OAuth connector and that are not in `tandem.yaml` are offered when their
 client id env var is set, so setting `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` is enough to show Connect
-buttons for Gmail and Calendar.
+buttons for Gmail and Calendar. Their names are `gmail`, `calendar`, `slack` and `outlook` (the type name
+when that name is taken), and their `configured` is `false`.
 
 ### 15.4 Web Push (`tandem.push`)
 

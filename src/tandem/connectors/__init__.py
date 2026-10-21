@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from tandem.config import ConnectorConfig
-from tandem.connectors import calendar, fake, mail, mcp, simple  # noqa: F401 - register types
+from tandem.connectors import calendar, fake, google, mail, mcp, microsoft, simple, slack  # noqa: F401 - register types
 from tandem.connectors.base import (
     CONNECTOR_TYPES,
     CalendarItem,

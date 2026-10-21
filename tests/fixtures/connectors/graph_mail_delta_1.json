@@ -1,0 +1,34 @@
+{
+  "value": [
+    {
+      "id": "AAM1",
+      "subject": "Contract signature needed today",
+      "isRead": false,
+      "importance": "high",
+      "receivedDateTime": "2026-10-21T12:10:00Z",
+      "conversationId": "conv-1",
+      "internetMessageId": "<contract@legal.example>",
+      "inferenceClassification": "focused",
+      "categories": [],
+      "from": {
+        "emailAddress": {
+          "name": "Legal",
+          "address": "legal@partner.example"
+        }
+      },
+      "toRecipients": [
+        {
+          "emailAddress": {
+            "address": "sam@example.com"
+          }
+        }
+      ],
+      "body": {
+        "contentType": "text",
+        "content": "Please sign the contract today."
+      },
+      "bodyPreview": "Please sign"
+    }
+  ],
+  "@odata.nextLink": "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$skiptoken=page2"
+}

@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "messages": [
+    {
+      "type": "message",
+      "subtype": "channel_join",
+      "user": "U03",
+      "text": "joined",
+      "ts": "1792328300.000100"
+    },
+    {
+      "type": "message",
+      "user": "U03",
+      "text": "<@U01> the build is red",
+      "ts": "1792328200.000100"
+    }
+  ]
+}

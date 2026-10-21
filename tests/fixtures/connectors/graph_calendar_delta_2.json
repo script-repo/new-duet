@@ -1,0 +1,43 @@
+{
+  "value": [
+    {
+      "id": "EV2",
+      "subject": "Vendor sync",
+      "isOrganizer": false,
+      "responseStatus": {
+        "response": "notResponded"
+      },
+      "lastModifiedDateTime": "2026-10-21T13:25:00Z",
+      "organizer": {
+        "emailAddress": {
+          "address": "vendor@supplier.example"
+        }
+      },
+      "start": {
+        "dateTime": "2026-10-23T16:00:00.0000000",
+        "timeZone": "UTC"
+      },
+      "end": {
+        "dateTime": "2026-10-23T16:30:00.0000000",
+        "timeZone": "UTC"
+      },
+      "attendees": [
+        {
+          "emailAddress": {
+            "address": "sam@example.com"
+          },
+          "status": {
+            "response": "none"
+          }
+        }
+      ]
+    },
+    {
+      "id": "EV1",
+      "@removed": {
+        "reason": "deleted"
+      }
+    }
+  ],
+  "@odata.deltaLink": "https://graph.microsoft.com/v1.0/me/calendarView/delta?$deltatoken=cal-d2"
+}
