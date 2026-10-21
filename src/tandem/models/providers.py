@@ -206,9 +206,10 @@ class OpenAIClient(ModelClient):
                 f"no API key: set {self.profile.api_key_env or 'api_key_env'} for model profile {self.profile.name!r}"
             )
         headers = {"Authorization": f"Bearer {key or 'not-needed'}"}
+        url = f"{self.base_url()}/chat/completions"
         async with self._client() as client:
             r = await client.post(
-                f"{self.base_url()}/chat/completions",
+                url,
                 json=self.build_body(
                     messages, tools, json_mode=json_mode, max_tokens=max_tokens, temperature=temperature
                 ),

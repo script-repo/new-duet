@@ -31,7 +31,9 @@ URGENT = re.compile(
 )
 CRITICAL = re.compile(r"\b(suspend\w*|outage|breach|fraud|locked out)\b", re.I)
 MEETING = re.compile(
-    r"\b(find (?:some )?time|grab (?:a )?(?:call|coffee)|meet(?:ing)?|30 minutes|schedule a)\b", re.I
+    r"\b(find (?:some )?time|grab (?:a )?(?:call|coffee)|\d+ minutes (?:this|next) week|"
+    r"meet (?:this|next) week|schedule a (?:call|meeting)|set up a (?:call|meeting))\b",
+    re.I,
 )
 
 

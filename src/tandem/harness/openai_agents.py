@@ -1,9 +1,9 @@
 """OpenAI Agents SDK harness (extra `[openai-agents]`).
 
 Each gated Tandem tool becomes a `FunctionTool`. OpenAI and OpenAI-compatible profiles (NAI, vLLM,
-Ollama, LiteLLM, Gemini's and Anthropic's OpenAI-compatible endpoints) run through
-`OpenAIChatCompletionsModel` with an `AsyncOpenAI` client built from the profile; the key is resolved
-server-side. Tracing to OpenAI is disabled unless `harness_options.openai-agents.tracing: true`.
+Ollama, LiteLLM) run through `OpenAIChatCompletionsModel` with an `AsyncOpenAI` client built from the
+profile; the key is resolved server-side. Anthropic, Gemini and mock profiles go through Tandem's
+in-process Chat Completions bridge (`tandem.models.openai_bridge`), so every provider works. Tracing to OpenAI is disabled unless `harness_options.openai-agents.tracing: true`.
 """
 
 from __future__ import annotations
@@ -64,17 +64,23 @@ class OpenAIAgentsHarness(Harness):
         from openai import AsyncOpenAI
 
         p = ctx.profile
-        if p.provider not in COMPATIBLE:
-            return HarnessResult(
-                f"The OpenAI Agents SDK harness needs an OpenAI or OpenAI-compatible profile, not {p.provider}. "
-                "Point a profile at your provider's OpenAI-compatible endpoint.",
-                ok=False,
-            )
         if not ctx.options.get("openai-agents", {}).get("tracing"):
             agents.set_tracing_disabled(True)
-        key = (ctx.secrets.get(p.api_key_env) if ctx.secrets and p.api_key_env else None) or "not-needed"
-        base = p.base_url or ("http://localhost:11434/v1" if p.provider == "ollama" else None)
-        client = AsyncOpenAI(api_key=key, base_url=base)
+        if p.provider in COMPATIBLE and not ctx.options.get("openai-agents", {}).get("bridge"):
+            key = (ctx.secrets.get(p.api_key_env) if ctx.secrets and p.api_key_env else None) or "not-needed"
+            base = p.base_url or ("http://localhost:11434/v1" if p.provider == "ollama" else None)
+            client = AsyncOpenAI(api_key=key, base_url=base)
+        else:
+            # Anthropic, Gemini and mock profiles: serve Chat Completions in-process from Tandem's client.
+            import httpx
+
+            from tandem.models.openai_bridge import ChatCompletionsBridge
+
+            client = AsyncOpenAI(
+                api_key="in-process",
+                base_url="http://tandem.bridge/v1",
+                http_client=httpx.AsyncClient(transport=ChatCompletionsBridge(ctx.model)),
+            )
         model = agents.OpenAIChatCompletionsModel(model=p.model, openai_client=client)
         agent = agents.Agent(
             name="Tandem worker",

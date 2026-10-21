@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PACKAGE_DIR = Path(__file__).resolve().parent
@@ -192,14 +192,12 @@ class AppConfig(BaseModel):
     user_name: str = ""
     demo_autoplay: bool | None = None  # mock mode: brief + check-in at startup
 
-    @field_validator("models", mode="before")
-    @classmethod
-    def _names(cls, v: Any) -> Any:
-        if isinstance(v, dict):
-            for key, prof in v.items():
-                if isinstance(prof, dict):
-                    prof.setdefault("name", key)
-        return v
+    @model_validator(mode="after")
+    def _names(self) -> AppConfig:
+        for key, prof in self.models.items():
+            if not prof.name:
+                prof.name = key
+        return self
 
     @property
     def mock(self) -> bool:
