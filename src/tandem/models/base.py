@@ -116,12 +116,24 @@ class ModelClient(ABC):
             delay *= 2
         raise ModelError("unreachable")
 
+    def body(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """The provider request body plus the profile's `extra_body` (e.g. reasoning effort, vLLM kwargs)."""
+        return {**self.build_body(*args, **kwargs), **(self.profile.extra_body or {})}
+
+    def build_body(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        raise NotImplementedError
+
     async def complete_json(self, messages: list[Message], **kwargs: Any) -> Any:
         """Ask for JSON and parse it; one repair round if the first answer is not valid JSON."""
         resp = await self.complete(messages, json_mode=True, **kwargs)
         try:
             return extract_json(resp.text)
         except ValueError:
+            if resp.stop_reason in ("length", "max_tokens", "MAX_TOKENS") and not resp.text.strip():
+                raise ValueError(
+                    f"{self.profile.model} used all {self.profile.max_tokens} max_tokens before answering "
+                    "(a reasoning model? raise max_tokens or lower its reasoning effort with extra_body)"
+                ) from None
             repair = [
                 *messages,
                 Message("assistant", resp.text),

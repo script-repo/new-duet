@@ -102,7 +102,7 @@ class AnthropicClient(ModelClient):
         async with self._client() as client:
             r = await client.post(
                 url,
-                json=self.build_body(
+                json=self.body(
                     messages, tools, json_mode=json_mode, max_tokens=max_tokens, temperature=temperature
                 ),
                 headers={"x-api-key": key, "anthropic-version": "2023-06-01"},
@@ -210,7 +210,7 @@ class OpenAIClient(ModelClient):
         async with self._client() as client:
             r = await client.post(
                 url,
-                json=self.build_body(
+                json=self.body(
                     messages, tools, json_mode=json_mode, max_tokens=max_tokens, temperature=temperature
                 ),
                 headers=headers,
@@ -327,7 +327,7 @@ class GeminiClient(ModelClient):
         async with self._client() as client:
             r = await client.post(
                 f"{base}/models/{self.profile.model}:generateContent",
-                json=self.build_body(
+                json=self.body(
                     messages, tools, json_mode=json_mode, max_tokens=max_tokens, temperature=temperature
                 ),
                 headers={"x-goog-api-key": key},

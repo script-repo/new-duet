@@ -97,15 +97,21 @@ async def run_triage_eval(
     limit: int | None = None,
     base_url: str | None = None,
     api_key_env: str | None = None,
+    max_tokens: int | None = None,
+    extra_body: dict[str, Any] | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
     progress: Callable[[int, int], None] | None = None,
 ) -> dict[str, Any]:
     """Triage every item with rules + `model` + combine, exactly as a check-in would, and score it."""
     rows, meta = load_triage_dataset(dataset)
     rows = rows[:limit] if limit else rows
-    client = build_eval_client(
-        model, cfg, "triage", base_url=base_url, api_key_env=api_key_env, transport=transport
-    )
+    opts: dict[str, Any] = {
+        "base_url": base_url,
+        "api_key_env": api_key_env,
+        "max_tokens": max_tokens,
+        "extra_body": extra_body,
+    }
+    client = build_eval_client(model, cfg, "triage", transport=transport, **opts)
     h = _runtime(meta, {"triage": client})
     started = time.perf_counter()
     try:
@@ -156,7 +162,7 @@ async def run_triage_eval(
             }
         )
     items.sort(key=lambda i: i["id"])
-    profile = resolve_profile(model, cfg, base_url=base_url, api_key_env=api_key_env)
+    profile = resolve_profile(model, cfg, **opts)
     return {
         "kind": "triage",
         "model": model,
@@ -167,6 +173,7 @@ async def run_triage_eval(
         "seconds": round(elapsed, 2),
         "usage": _usage({"triage": client}),
         "model_failures": len(warnings),
+        "model_failure_details": [w[:300] for w in warnings[:5]],
         "metrics": triage_metrics(items),
         "items": items,
     }
@@ -181,16 +188,23 @@ async def run_brief_eval(
     limit: int | None = None,
     base_url: str | None = None,
     api_key_env: str | None = None,
+    max_tokens: int | None = None,
+    extra_body: dict[str, Any] | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> dict[str, Any]:
     """Write each scenario's brief with the real brief prompt, then grade it with a second model."""
     path = dataset or evals_dir() / "briefs.jsonl"
     scenarios = load_jsonl(path)[: limit or None]
     _, meta = load_triage_dataset()
-    writer = build_eval_client(
-        model, cfg, "brief", base_url=base_url, api_key_env=api_key_env, transport=transport
-    )
-    grader = build_eval_client(judge, cfg, "chat", transport=transport)
+    opts: dict[str, Any] = {
+        "base_url": base_url,
+        "api_key_env": api_key_env,
+        "max_tokens": max_tokens,
+        "extra_body": extra_body,
+    }
+    writer = build_eval_client(model, cfg, "brief", transport=transport, **opts)
+    # a provider/model judge shares the endpoint options (same gateway, e.g. NAI or OpenRouter)
+    grader = build_eval_client(judge, cfg, "chat", transport=transport, **(opts if "/" in judge else {}))
     h = _runtime(meta, {"brief": writer, "judge": grader})
     started = time.perf_counter()
     results = []

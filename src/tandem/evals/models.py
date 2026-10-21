@@ -28,8 +28,20 @@ def resolve_profile(
     *,
     base_url: str | None = None,
     api_key_env: str | None = None,
+    max_tokens: int | None = None,
+    extra_body: dict[str, Any] | None = None,
 ) -> ModelProfile:
     """`triage` (a role), `cheap` (a profile in tandem.yaml), `anthropic/claude-haiku-5-5`, or `mock`."""
+    profile = _resolve(spec, cfg, base_url, api_key_env)
+    overrides: dict[str, Any] = {}
+    if max_tokens:
+        overrides["max_tokens"] = max_tokens
+    if extra_body:
+        overrides["extra_body"] = {**profile.extra_body, **extra_body}
+    return profile.model_copy(update=overrides) if overrides else profile
+
+
+def _resolve(spec: str, cfg: AppConfig, base_url: str | None, api_key_env: str | None) -> ModelProfile:
     if spec in ("mock", "noisy") or spec.startswith("noisy:"):
         return ModelProfile(name=spec, provider="mock", model="mock-eval")
     if spec in cfg.models:
@@ -59,9 +71,13 @@ def build_eval_client(
     *,
     base_url: str | None = None,
     api_key_env: str | None = None,
+    max_tokens: int | None = None,
+    extra_body: dict[str, Any] | None = None,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> ModelClient:
-    profile = resolve_profile(spec, cfg, base_url=base_url, api_key_env=api_key_env)
+    profile = resolve_profile(
+        spec, cfg, base_url=base_url, api_key_env=api_key_env, max_tokens=max_tokens, extra_body=extra_body
+    )
     if spec == "noisy" or spec.startswith("noisy:"):
         rate = float(spec.split(":", 1)[1]) if ":" in spec else 0.3
         return NoisyModel(profile, role, rate=rate)

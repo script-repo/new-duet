@@ -26,6 +26,7 @@ def triage_report(r: dict[str, Any]) -> str:
     ]
     if r.get("model_failures"):
         lines.append(f"model failures  {r['model_failures']} batch(es) fell back to rules only")
+        lines += [f"  - {d}" for d in r.get("model_failure_details", [])[:3]]
     lines += ["", format_confusion(m["confusion"]), "", "per label       precision  recall     F1  support"]
     for lab in LABELS:
         p = m["per_label"][lab]

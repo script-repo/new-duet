@@ -77,6 +77,8 @@ async def _eval(args: Any) -> int:
         "limit": args.limit,
         "base_url": args.base_url,
         "api_key_env": args.api_key_env,
+        "max_tokens": args.max_tokens,
+        "extra_body": json.loads(args.extra_body) if args.extra_body else None,
     }
     try:
         if args.eval_kind == "triage":
@@ -141,6 +143,10 @@ def main(argv: list[str] | None = None) -> int:
         e.add_argument("--limit", type=int)
         e.add_argument("--base-url", help="for provider/model specs: the endpoint (NAI, vLLM, Ollama...)")
         e.add_argument("--api-key-env", help="for provider/model specs: the env var holding the key")
+        e.add_argument("--max-tokens", type=int, help="override max_tokens (reasoning models need room)")
+        e.add_argument(
+            "--extra-body", help='JSON merged into each request, e.g. \'{"reasoning": {"effort": "low"}}\''
+        )
         e.add_argument("--json", dest="json_out", help="also write the full result to this file")
         e.add_argument("--no-save", action="store_true", help="don't record the result for the Evals page")
         e.add_argument(

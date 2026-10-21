@@ -78,6 +78,7 @@ class ModelProfile(BaseModel):
     max_tokens: int = 4096
     timeout_s: float = 120.0
     name: str = ""
+    extra_body: dict[str, Any] = Field(default_factory=dict)  # merged into each request (reasoning effort...)
 
     def api_key(self) -> str | None:
         return os.environ.get(self.api_key_env) if self.api_key_env else None
