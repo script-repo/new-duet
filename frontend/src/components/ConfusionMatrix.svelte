@@ -133,9 +133,25 @@
     color: #fff;
   }
   @media (prefers-color-scheme: dark) {
+    /* on the dark surface the low steps need more ink to separate from empty cells */
+    .s1 {
+      background: color-mix(in oklab, var(--heat) 24%, var(--surface));
+    }
+    .s2 {
+      background: color-mix(in oklab, var(--heat) 38%, var(--surface));
+    }
+    .s3 {
+      background: color-mix(in oklab, var(--heat) 54%, var(--surface));
+    }
+    .s4 {
+      background: color-mix(in oklab, var(--heat) 68%, var(--surface));
+    }
+    .s5 {
+      background: color-mix(in oklab, var(--heat) 82%, var(--surface));
+    }
     .s4,
     .s5 {
-      color: var(--text);
+      color: #fff;
     }
   }
   .s0 {

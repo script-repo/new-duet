@@ -228,3 +228,11 @@ export function sparkPath(values: (number | null)[], w: number, h: number, lo = 
 export function historyOf(history: EvalHistoryEntry[], kind: string): EvalHistoryEntry[] {
   return (history ?? []).filter((h) => h.kind === kind).reverse();
 }
+
+/** A brief scenario's missing/leaked groups: a group is a phrase or a list of alternatives ("Q3 or third quarter"). */
+export function groupText(groups: unknown[] | undefined): string {
+  return (groups ?? [])
+    .map((g) => (Array.isArray(g) ? g.map(String).join(' or ') : String(g)))
+    .filter(Boolean)
+    .join('; ');
+}

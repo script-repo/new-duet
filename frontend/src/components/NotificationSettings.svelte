@@ -26,7 +26,7 @@
   let thisId = $state<string | null>(currentSubscriptionId());
   let pushBusy = $state(false);
   let testing = $state(false);
-  let testResult = $state<string | null>(null);
+  let testResult = $state<{ text: string; ok: boolean } | null>(null);
 
   // quiet hours are edited locally and saved when both times are valid
   let qStart = $state('21:00');
@@ -179,10 +179,14 @@
     errors = { ...errors, test: '' };
     try {
       const r = await api.testPush();
-      testResult = r.delivered
-        ? `Sent to ${r.delivered} of ${r.subscriptions} device${r.subscriptions === 1 ? '' : 's'}.`
-        : `Not delivered to any of ${r.subscriptions} device${r.subscriptions === 1 ? '' : 's'}. See the error on each below.`;
-      devices = await api.pushSubscriptions();
+      const after = await api.pushSubscriptions();
+      const dropped = Math.max(0, r.subscriptions - after.length);
+      const plural = (n: number) => `${n} device${n === 1 ? '' : 's'}`;
+      let text = r.delivered ? `Sent to ${r.delivered} of ${plural(r.subscriptions)}.` : `Not delivered to any of ${plural(r.subscriptions)}.`;
+      if (dropped) text += ` ${plural(dropped)} removed: the push service no longer accepts ${dropped === 1 ? 'it' : 'them'}. Turn push on again there.`;
+      else if (r.delivered < r.subscriptions) text += ' See the error under each device.';
+      testResult = { text, ok: r.delivered === r.subscriptions };
+      devices = after;
     } catch (e) {
       errors = { ...errors, test: errorMessage(e) };
     } finally {
@@ -250,7 +254,7 @@
       </div>
     </div>
     <div aria-live="polite">
-      {#if testResult}<p class="hint ok-text">{testResult}</p>{/if}
+      {#if testResult}<p class="hint {testResult.ok ? 'ok-text' : 'warn-text'}">{testResult.text}</p>{/if}
       {#if errors.test}<p class="field-error" role="alert">{errors.test}</p>{/if}
       {#if errors.push_enabled}<p class="field-error" role="alert">{errors.push_enabled}</p>{/if}
       {#if settings && !settings.push_enabled && devices?.length}<p class="hint warn-text">Push is paused for every device; the app and other channels still get notifications.</p>{/if}
@@ -266,7 +270,7 @@
             <span class="ico"><Icon name="phone" size={16} /></span>
             <div class="grow">
               <strong>{d.label || d.host || 'Device'}</strong>
-              {#if d.id === thisId}<span class="badge accent">this device</span>{/if}
+              {#if d.id === thisId}<span class="badge accent this">this device</span>{/if}
               <div class="faint small">
                 {d.host ?? ''} · added {relativeTime(d.created_at, app.now)}{#if d.last_ok_at} · last delivered {relativeTime(d.last_ok_at, app.now)}{/if}
               </div>
@@ -434,6 +438,9 @@
   .devices li + li {
     border-top: 1px solid var(--border);
   }
+  .this {
+    margin-left: 6px;
+  }
   .ico {
     color: var(--text-3);
     display: grid;
@@ -469,9 +476,8 @@
     cursor: pointer;
   }
   .segmented label.on {
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: var(--shadow);
+    background: var(--text);
+    color: var(--bg);
   }
   .segmented input {
     position: absolute;

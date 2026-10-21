@@ -3,7 +3,7 @@
   import Icon from './Icon.svelte';
   import { api } from '../lib/api';
   import {
-    compactNumber, confusionMatrix, headlineTiles, historyOf, LABELS, modelOptions, pct, score, sparkPath, splitErrors,
+    compactNumber, confusionMatrix, groupText, headlineTiles, historyOf, LABELS, modelOptions, pct, score, sparkPath, splitErrors,
     tagRows, TARGETS,
   } from '../lib/evals';
   import { dateTime, relativeTime } from '../lib/format';
@@ -14,6 +14,7 @@
   const JUDGE: JudgeCriterion[] = ['coverage', 'prioritization', 'faithfulness', 'concision', 'actionability'];
   const LABEL_TONE: Record<string, string> = { ignore: '', brief: 'info', notify: 'warn', act: 'accent' };
   const OTHER_PAGE = 12;
+  const MISSED_PAGE = 6;
 
   let data = $state<EvalsResponse | null>(null);
   let loadError = $state<string | null>(null);
@@ -22,6 +23,7 @@
   let startedAt = $state<number | null>(null);
   let runError = $state<string | null>(null);
   let showAllOther = $state(false);
+  let showAllMissed = $state(false);
 
   const triage = $derived(data?.triage ?? null);
   const brief = $derived(data?.brief ?? null);
@@ -35,6 +37,7 @@
   const spark = $derived(sparkPath(triageHistory.map((h) => h.headline), 160, 36, 0, 1, 3));
   const sparkLast = $derived(triageHistory.length ? triageHistory[triageHistory.length - 1] : null);
   const elapsed = $derived(startedAt ? Math.max(0, Math.round((app.now - startedAt) / 1000)) : 0);
+  const missedShown = $derived(showAllMissed ? errs.missed : errs.missed.slice(0, MISSED_PAGE));
   const otherShown = $derived(showAllOther ? errs.other : errs.other.slice(0, OTHER_PAGE));
   const labelsOf = $derived(triage?.metrics.labels?.length ? triage.metrics.labels : LABELS);
 
@@ -149,7 +152,7 @@ uv run tandem eval brief --model triage --judge brief</code></pre>
         <ul class="tiles" aria-label="Headline numbers">
           {#each tiles as t (t.key)}
             <li class="tile {t.tone}">
-              <span class="label">{t.label}</span>
+              <span class="label">{t.label}{#if t.tone === 'good'} <span class="met" title="meets the target"><Icon name="check" size={13} label="meets the target" /></span>{/if}</span>
               <span class="value">{t.value}</span>
               <span class="detail">{t.detail}</span>
             </li>
@@ -197,35 +200,38 @@ uv run tandem eval brief --model triage --judge brief</code></pre>
           </div>
         </div>
 
-        <div class="grid">
-          <div class="card pad">
-            <h3>Missed urgent <span class="badge {errs.missed.length ? 'danger' : 'ok'}">{triage.metrics.missed_urgent}</span></h3>
-            {#if errs.missed.length}
-              <ul class="errors">
-                {#each errs.missed as e (e.id)}{@render errorItem(e, true)}{/each}
-              </ul>
-              {#if triage.metrics.missed_urgent > errs.missed.length}
-                <p class="faint small">Showing {errs.missed.length}; all ids: <span class="mono">{triage.metrics.missed_urgent_ids.join(', ')}</span></p>
-              {/if}
-            {:else}
-              <p class="ok-text"><Icon name="check-circle" size={15} /> Nothing urgent was held back.</p>
-            {/if}
-          </div>
-
-          <div class="card pad">
-            <h3>By tag</h3>
-            <ul class="tags">
-              {#each tags as t (t.tag)}
-                <li class:warn={t.belowTarget}>
-                  <span class="tname">{t.tag}{#if t.trap}<span class="sr-only"> (trap tag)</span>{/if}</span>
-                  <span class="track sm"><span class="fill p" style:width="{t.accuracy * 100}%"></span>{#if t.trap}<span class="target" style:left="{TARGETS.tagAccuracy * 100}%" title="target {pct(TARGETS.tagAccuracy)}"></span>{/if}</span>
-                  <span class="v">{pct(t.accuracy)}</span>
-                  <span class="faint n">n={t.n}</span>
-                </li>
-              {/each}
+        <div class="card pad block">
+          <h3>Missed urgent <span class="badge {errs.missed.length ? 'danger' : 'ok'}">{triage.metrics.missed_urgent}</span></h3>
+          {#if errs.missed.length}
+            <ul class="errors cols">
+              {#each missedShown as e (e.id)}{@render errorItem(e, true)}{/each}
             </ul>
-            <p class="faint small">Worst first. Tags <span class="mono">trap</span>, <span class="mono">phishing</span> and <span class="mono">injection</span> should reach {pct(TARGETS.tagAccuracy)} (marker).</p>
-          </div>
+            {#if errs.missed.length > MISSED_PAGE}
+              <button class="btn sm ghost more" onclick={() => (showAllMissed = !showAllMissed)} aria-expanded={showAllMissed}>
+                {showAllMissed ? 'Show fewer' : `Show all ${errs.missed.length}`}
+              </button>
+            {/if}
+            {#if triage.metrics.missed_urgent > errs.missed.length}
+              <p class="faint small">Listed {errs.missed.length}; all ids: <span class="mono">{triage.metrics.missed_urgent_ids.join(', ')}</span></p>
+            {/if}
+          {:else}
+            <p class="ok-text"><Icon name="check-circle" size={15} /> Nothing urgent was held back.</p>
+          {/if}
+        </div>
+
+        <div class="card pad block">
+          <h3>Accuracy by tag</h3>
+          <ul class="tags">
+            {#each tags as t (t.tag)}
+              <li class:warn={t.belowTarget}>
+                <span class="tname">{t.tag}{#if t.trap}<span class="sr-only"> (trap tag)</span>{/if}</span>
+                <span class="track sm"><span class="fill p" style:width="{t.accuracy * 100}%"></span>{#if t.trap}<span class="target" style:left="{TARGETS.tagAccuracy * 100}%" title="target {pct(TARGETS.tagAccuracy)}"></span>{/if}</span>
+                <span class="v">{pct(t.accuracy)}</span>
+                <span class="faint n">n={t.n}</span>
+              </li>
+            {/each}
+          </ul>
+          <p class="faint small">Worst first. Tags <span class="mono">trap</span>, <span class="mono">phishing</span> and <span class="mono">injection</span> should reach {pct(TARGETS.tagAccuracy)} (the marker); highlighted when below.</p>
         </div>
 
         {#if errs.other.length}
@@ -298,8 +304,8 @@ uv run tandem eval brief --model triage --judge brief</code></pre>
                   </div>
                   {#if sc.error}<p class="small danger-text">{sc.error}</p>{:else}
                     {#if sc.notes}<p class="small muted">{sc.notes}</p>{/if}
-                    {#if sc.missing?.length}<p class="small"><span class="faint">Missing:</span> {sc.missing.join(', ')}</p>{/if}
-                    {#if sc.leaks?.length}<p class="small danger-text">Leaked: {sc.leaks.join(', ')}</p>{/if}
+                    {#if sc.missing?.length}<p class="small"><span class="faint">Missing:</span> {groupText(sc.missing)}</p>{/if}
+                    {#if sc.leaks?.length}<p class="small danger-text">Leaked: {groupText(sc.leaks)}</p>{/if}
                   {/if}
                 </li>
               {/each}
@@ -502,9 +508,10 @@ uv run tandem eval brief --model triage --judge brief</code></pre>
   .tile.bad .label {
     color: var(--danger);
   }
-  .tile.good .label::after {
-    content: ' ✓';
+  .met {
     color: var(--ok);
+    display: inline-flex;
+    vertical-align: -2px;
   }
   .grid {
     display: grid;
@@ -631,16 +638,19 @@ uv run tandem eval brief --model triage --judge brief</code></pre>
   }
 
   /* ---- tags ---- */
+  .block {
+    margin-bottom: 14px;
+  }
   .tags {
     list-style: none;
     margin: 0 0 10px;
     padding: 0;
-    display: grid;
-    gap: 3px;
-    max-height: 360px;
-    overflow-y: auto;
+    columns: 280px 3;
+    column-gap: 24px;
   }
   .tags li {
+    break-inside: avoid;
+    margin-bottom: 3px;
     display: grid;
     grid-template-columns: 92px 1fr 40px 38px;
     align-items: center;

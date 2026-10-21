@@ -398,8 +398,9 @@ export interface BriefScenario {
   id: string;
   title: string | null;
   coverage?: string; // "2/3"
-  missing?: string[];
-  leaks?: string[];
+  /** must-mention groups not covered; a group may be a list of alternatives */
+  missing?: (string | string[])[];
+  leaks?: (string | string[])[];
   scores?: Partial<Record<JudgeCriterion, number>>;
   notes?: string;
   error?: string;

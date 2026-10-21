@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  compactNumber, confusionMatrix, headlineTiles, heatStep, historyOf, modelOptions, pct, score, sparkPath, splitErrors, tagRows,
+  compactNumber, confusionMatrix, groupText, headlineTiles, heatStep, historyOf, modelOptions, pct, score, sparkPath, splitErrors, tagRows,
 } from './evals';
 import type { TriageError, TriageSummary } from './types';
 
@@ -108,5 +108,12 @@ describe('sparkline and history', () => {
       { kind: 'triage', model: 'm', ran_at: '1', headline: 0.5, missed_urgent: 9 },
     ];
     expect(historyOf(h, 'triage').map((x) => x.ran_at)).toEqual(['1', '2']);
+  });
+});
+
+describe('groupText', () => {
+  it('joins groups, with alternatives inside one', () => {
+    expect(groupText([['1043', 'Oakridge'], 'reminder'])).toBe('1043 or Oakridge; reminder');
+    expect(groupText(undefined)).toBe('');
   });
 });
