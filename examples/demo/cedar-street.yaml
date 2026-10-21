@@ -1,0 +1,92 @@
+# Seeded demo data for the `fake` connector (mock mode). Everything here is fictional.
+# Times are local wall-clock times "today" (in schedule.timezone); "-HH:MM" means yesterday evening.
+# Events are released into the inbox once the clock passes their time, so a day plays out.
+
+user:
+  name: Jordan
+  business: Cedar Street Bikes
+  about: Owner of Cedar Street Bikes, a bike shop with a repair bench and two locations (Main St and Riverside).
+
+memory:
+  - {kind: core, content: "The user is Jordan Lee, owner of Cedar Street Bikes (two locations: Main St and Riverside)."}
+  - {kind: preference, content: "vip: mira@brightwater.example, sam@ledgerwise.example"}
+  - {kind: preference, content: "mute: deals@adblast.example, newsletter"}
+  - {kind: preference, content: "Keep emails short and friendly; sign off with 'Thanks, Jordan'."}
+  - {kind: fact, content: "Sam Patel (Ledgerwise) is the bookkeeper and gets the weekly cash summary."}
+
+contacts:
+  - {name: Sam Patel, email: sam@ledgerwise.example, role: Bookkeeper, company: Ledgerwise}
+  - {name: Mira Chen, email: mira@brightwater.example, role: Investor, company: Brightwater Capital}
+  - {name: Diego Alvarez, email: diego@trailhead.example, role: Account manager, company: Trailhead Components}
+  - {name: Priya Nair, email: priya@riversideproperties.example, role: Property manager, company: Riverside Properties}
+
+inbox:
+  - id: m1
+    at: "-22:10"
+    from: mira@brightwater.example
+    subject: Q3 numbers for Thursday's board call?
+    body: |
+      Hi Jordan,
+      Could you send the updated Q3 numbers before Thursday's board call? A one-page summary is plenty.
+      Thanks, Mira
+  - id: m2
+    at: "-23:40"
+    from: news@cyclingretail.example
+    subject: This week in cycling retail
+    body: Top stories, new e-bike rules, and more. Unsubscribe at any time.
+    headers: {List-Unsubscribe: "<mailto:unsubscribe@cyclingretail.example>"}
+  - id: m3
+    at: "06:30"
+    from: diego@trailhead.example
+    subject: Drivetrain price increase from Nov 1
+    body: |
+      Hi Jordan,
+      Heads up that drivetrain parts go up 6% on November 1. Can you confirm your Q4 order by Friday so we can lock current pricing?
+      Diego
+  - id: m4
+    at: "09:10"
+    from: billing@cloudpos.example
+    subject: "Payment failed: POS subscription card declined"
+    body: |
+      Your card ending 4242 was declined for the Cedar Street Bikes POS subscription ($189.00).
+      Update your payment method by 12:00 today or point-of-sale service will be suspended at both locations.
+  - id: m5
+    at: "10:20"
+    from: priya@riversideproperties.example
+    subject: Riverside lease renewal
+    body: |
+      Hi Jordan,
+      Can we find 30 minutes this week to talk about the Riverside lease renewal? The current term ends in January.
+      Best, Priya
+  - id: m6
+    at: "14:00"
+    from: deals@adblast.example
+    subject: 50% off local ads this week only!!!
+    body: Reach more riders. Limited time offer. Unsubscribe here.
+  - id: m7
+    at: "15:30"
+    from: ar@ledgerwise.example
+    subject: "Overdue: invoice #1043, Oakridge Cycling Club ($2,350.00)"
+    body: Invoice #1043 to Oakridge Cycling Club is 14 days past due. Want us to send a reminder?
+
+calendar:
+  - {title: Team standup, at: "08:30", minutes: 15, location: Main St}
+  - {title: "Supplier call: Trailhead", at: "11:00", minutes: 30, attendees: [diego@trailhead.example]}
+  - {title: Lunch with Mira Chen, at: "13:00", minutes: 60, location: Harbor Diner, attendees: [mira@brightwater.example]}
+  - {title: Inventory count, at: "16:00", minutes: 90, location: Riverside}
+
+payments:
+  - {id: p1, date: "-6", customer: Walk-in sales (Main St), amount: 4820.50, status: paid}
+  - {id: p2, date: "-5", customer: Walk-in sales (Riverside), amount: 2210.00, status: paid}
+  - {id: p3, date: "-4", customer: City Commuter Program, amount: 3600.00, status: paid}
+  - {id: p4, date: "-3", customer: Repair bench, amount: 1385.75, status: paid}
+  - {id: p5, date: "-2", customer: Oakridge Cycling Club, amount: 2350.00, status: overdue}
+  - {id: p6, date: "-1", customer: Online store, amount: 1912.40, status: paid}
+  - {id: p7, date: "0", customer: CloudPOS subscription, amount: -189.00, status: failed}
+  - {id: p8, date: "0", customer: Walk-in sales (Main St), amount: 980.25, status: paid}
+
+payment_events:
+  - id: pe1
+    at: "05:55"
+    title: Payout of $8,420.15 sent to your bank
+    body: Weekly card payout for Cedar Street Bikes has been initiated.

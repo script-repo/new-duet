@@ -1,0 +1,67 @@
+# Copy to tandem.yaml (git-ignored) and adjust. Secrets are referenced by env var name, never written here.
+user_name: Jordan
+
+models:
+  cheap:   # frequent check-ins: a small, fast model
+    provider: openai_compatible          # Nutanix Enterprise AI, vLLM, Ollama, LM Studio, LiteLLM...
+    base_url: https://nai.example.com/api/v1
+    model: llama-3-1-8b-instruct
+    api_key_env: NAI_API_KEY
+  strong:  # briefs, chat and real work
+    provider: anthropic                  # or openai | gemini | openai_compatible | ollama | mock
+    model: claude-opus-5-5
+    api_key_env: ANTHROPIC_API_KEY
+    max_tokens: 8192
+
+roles: {triage: cheap, brief: strong, chat: strong, worker: strong}
+
+harness:
+  default: builtin          # builtin | deepagents | claude-sdk | openai-agents | cli
+  max_steps: 24
+  max_concurrent: 2
+  cli_command: auto         # claude | codex | auto
+
+schedule:
+  checkin_every: 15m
+  brief_at: "07:30"
+  timezone: America/Toronto
+
+notify:
+  min_urgency: high         # interrupt only for high and critical
+  quiet_hours: "21:00-07:00"
+  max_per_hour: 4
+  channels:
+    - {type: ui}
+    # - {type: ntfy, url: https://ntfy.sh/my-private-topic}
+    # - {type: webhook, url: https://example.com/hooks/tandem}
+
+connectors:
+  - {type: webhook, name: inbox, secret_env: INBOX_WEBHOOK_SECRET}
+  # - type: imap
+  #   name: email
+  #   host: imap.example.com
+  #   username: me@example.com
+  #   password_env: IMAP_PASSWORD
+  #   smtp_host: smtp.example.com
+  # - {type: ics, name: calendar, url: "https://calendar.example.com/me.ics"}
+  # - {type: filesystem, name: files, root: ~/Documents/tandem-inbox}
+  # - type: mcp
+  #   name: github
+  #   command: npx
+  #   args: ["-y", "@modelcontextprotocol/server-github"]
+  #   env_from: [GITHUB_PERSONAL_ACCESS_TOKEN]
+  # - {type: fake, name: demo}     # seeded demo data
+
+sandbox:
+  mode: auto                # docker if available, else a restricted local folder
+  image: python:3.13-slim
+  network: false
+
+voice:
+  provider: none            # openai_compatible for server-side Whisper
+  # base_url: https://api.openai.com/v1
+  # model: whisper-1
+  # api_key_env: OPENAI_API_KEY
+
+policy: examples/policy.yaml
+skills: []                  # extra skill folders

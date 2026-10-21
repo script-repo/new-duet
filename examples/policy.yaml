@@ -1,0 +1,27 @@
+# Tandem approval policy. First matching rule wins. Actions: allow | ask | deny.
+# Silence never approves: pending approvals expire after timeout_s and count as a denial.
+default: allow
+timeout_s: 900
+on_timeout: deny
+rules:
+  - match: {tags: [pay], args: {amount: {gt: 5000}}}
+    action: deny
+    reason: Payments over $5,000 are never made by the agent
+  - match: {tags: [send]}
+    action: ask
+    reason: Sends a message or invite as you
+  - match: {tags: [pay]}
+    action: ask
+    reason: Moves money
+  - match: {tags: [delete]}
+    action: ask
+    reason: Deletes something
+  - match: {tags: [external_post]}
+    action: ask
+    reason: Posts or changes something outside your workspace
+  - match: {tags: [exec], sandbox: local}
+    action: ask
+    reason: Runs a command without container isolation
+  - match: {tool: "cli_run"}
+    action: ask
+    reason: Runs a coding agent CLI in the task workspace

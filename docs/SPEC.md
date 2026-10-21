@@ -150,8 +150,9 @@ See §6.3.
 ```python
 class Connector(ABC):
     type: ClassVar[str]
-    name: str                      # instance name, used as tool prefix: "email" -> email_send
+    name: str  # instance name, used as tool prefix: "email" -> email_send
     poll_every: timedelta | None
+
     async def start(self) -> None: ...
     async def poll(self, since: datetime | None) -> list[InboundEvent]: ...
     def tools(self) -> list[Tool]: ...
@@ -176,9 +177,10 @@ An `InboundEvent` is `{source, kind, external_id, title, body, sender, occurred_
 
 ```python
 class Sandbox(ABC):
-    root: Path                         # host directory mounted as the workspace
+    root: Path  # host directory mounted as the workspace
     kind: Literal["docker", "local"]
-    async def exec(self, cmd: str, timeout: float = 60) -> ExecResult: ...   # code, stdout, stderr
+
+    async def exec(self, cmd: str, timeout: float = 60) -> ExecResult: ...  # code, stdout, stderr
     def read(self, rel: str) -> str: ...
     def write(self, rel: str, text: str) -> Path: ...
     def list(self, rel: str = ".") -> list[str]: ...
@@ -329,10 +331,12 @@ roles: {triage: cheap, brief: strong, chat: strong, worker: strong}
 ```python
 @dataclass
 class Tool:
-    name: str; description: str; parameters: dict
+    name: str
+    description: str
+    parameters: dict
     func: Callable[[dict, ToolContext], Awaitable[Any]]
     tags: frozenset[str] = frozenset({"read"})
-    editable: tuple[str, ...] = ()           # args the user may edit on the card
+    editable: tuple[str, ...] = ()  # args the user may edit on the card
     summarize: Callable[[dict], str] | None = None
 ```
 
@@ -342,24 +346,39 @@ class Tool:
 
 ```python
 @dataclass
-class TaskSpec:  id: str; title: str; instructions: str; harness: str; origin: str
+class TaskSpec:
+    id: str
+    title: str
+    instructions: str
+    harness: str
+    origin: str
+
+
 @dataclass
 class HarnessContext:
-    model: ModelClient                 # the worker-role client
-    profile: ModelProfile              # provider/model/base_url for SDKs that build their own client
-    tools: GatedTools                  # list + invoke(name, args) -> str  (policy, approvals, audit inside)
+    model: ModelClient  # the worker-role client
+    profile: ModelProfile  # provider/model/base_url for SDKs that build their own client
+    tools: GatedTools  # list + invoke(name, args) -> str  (policy, approvals, audit inside)
     sandbox: Sandbox
-    system_prompt: str                 # persona + core memory + skill index + rules
-    log: Callable[[str, str], Awaitable[None]]   # (kind, text) -> task log + activity
-    steer: asyncio.Queue[str]          # user steering messages
+    system_prompt: str  # persona + core memory + skill index + rules
+    log: Callable[[str, str], Awaitable[None]]  # (kind, text) -> task log + activity
+    steer: asyncio.Queue[str]  # user steering messages
     max_steps: int
-    secrets: SecretResolver            # for SDK clients only; never put in prompts
+    secrets: SecretResolver  # for SDK clients only; never put in prompts
+
+
 @dataclass
-class HarnessResult: summary: str; ok: bool = True; artifacts: list[str] = []
+class HarnessResult:
+    summary: str
+    ok: bool = True
+    artifacts: list[str] = []
+
 
 class Harness(ABC):
-    name: ClassVar[str]; display_name: ClassVar[str]
-    def availability(self) -> tuple[bool, str]: ...        # (ok, reason)
+    name: ClassVar[str]
+    display_name: ClassVar[str]
+
+    def availability(self) -> tuple[bool, str]: ...  # (ok, reason)
     async def run(self, task: TaskSpec, ctx: HarnessContext) -> HarnessResult: ...
 ```
 
