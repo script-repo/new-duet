@@ -1,0 +1,24 @@
+{
+  "ok": true,
+  "channels": [
+    {
+      "id": "D01",
+      "is_im": true,
+      "user": "U02"
+    },
+    {
+      "id": "C01",
+      "name": "general",
+      "is_channel": true,
+      "is_private": false
+    },
+    {
+      "id": "C02",
+      "name": "random",
+      "is_channel": true
+    }
+  ],
+  "response_metadata": {
+    "next_cursor": ""
+  }
+}

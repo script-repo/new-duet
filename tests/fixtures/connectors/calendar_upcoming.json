@@ -1,0 +1,21 @@
+{
+  "items": [
+    {
+      "id": "e4",
+      "status": "confirmed",
+      "summary": "1:1 with Dana",
+      "location": "Zoom",
+      "start": {
+        "dateTime": "2026-10-21T15:00:00-04:00"
+      },
+      "end": {
+        "dateTime": "2026-10-21T15:30:00-04:00"
+      },
+      "attendees": [
+        {
+          "email": "dana@acme.example"
+        }
+      ]
+    }
+  ]
+}

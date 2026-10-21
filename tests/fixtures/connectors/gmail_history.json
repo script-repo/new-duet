@@ -1,0 +1,34 @@
+{
+  "history": [
+    {
+      "id": "1001",
+      "messagesAdded": [
+        {
+          "message": {
+            "id": "m3",
+            "threadId": "t3",
+            "labelIds": [
+              "INBOX",
+              "UNREAD"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "1002",
+      "messagesAdded": [
+        {
+          "message": {
+            "id": "m4",
+            "threadId": "t4",
+            "labelIds": [
+              "SENT"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "historyId": "1005"
+}

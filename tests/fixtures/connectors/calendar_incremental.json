@@ -1,0 +1,40 @@
+{
+  "kind": "calendar#events",
+  "items": [
+    {
+      "id": "e2",
+      "status": "confirmed",
+      "summary": "Budget review",
+      "updated": "2026-10-21T13:30:00.000Z",
+      "htmlLink": "https://calendar.google.com/event?eid=e2",
+      "location": "Room 4",
+      "organizer": {
+        "email": "dana@acme.example"
+      },
+      "start": {
+        "dateTime": "2026-10-22T14:00:00-04:00"
+      },
+      "end": {
+        "dateTime": "2026-10-22T15:00:00-04:00"
+      },
+      "attendees": [
+        {
+          "email": "sam@example.com",
+          "self": true,
+          "responseStatus": "needsAction"
+        },
+        {
+          "email": "dana@acme.example",
+          "organizer": true,
+          "responseStatus": "accepted"
+        }
+      ]
+    },
+    {
+      "id": "e3",
+      "status": "cancelled",
+      "updated": "2026-10-21T13:40:00.000Z"
+    }
+  ],
+  "nextSyncToken": "sync-2"
+}

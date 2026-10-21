@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "user": {
+    "id": "U02",
+    "name": "dana",
+    "real_name": "Dana Ortiz",
+    "profile": {
+      "display_name": "Dana",
+      "email": "dana@acme.example"
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "id": "m1",
+  "threadId": "t1",
+  "labelIds": [
+    "INBOX",
+    "UNREAD",
+    "IMPORTANT"
+  ],
+  "snippet": "Can you confirm the Q3 numbers by noon?",
+  "internalDate": "1792328400000",
+  "payload": {
+    "mimeType": "multipart/alternative",
+    "headers": [
+      {
+        "name": "From",
+        "value": "Dana Ortiz <dana@acme.example>"
+      },
+      {
+        "name": "To",
+        "value": "sam@example.com"
+      },
+      {
+        "name": "Subject",
+        "value": "Q3 numbers"
+      },
+      {
+        "name": "Date",
+        "value": "Wed, 21 Oct 2026 08:20:00 -0400"
+      },
+      {
+        "name": "Message-ID",
+        "value": "<q3-numbers@acme.example>"
+      },
+      {
+        "name": "References",
+        "value": "<kickoff@acme.example>"
+      }
+    ],
+    "parts": [
+      {
+        "mimeType": "text/plain",
+        "filename": "",
+        "body": {
+          "size": 40,
+          "data": "SGkgU2FtLApDYW4geW91IGNvbmZpcm0gdGhlIFEzIG51bWJlcnMgYnkgbm9vbj8KRGFuYQ"
+        }
+      },
+      {
+        "mimeType": "text/html",
+        "filename": "",
+        "body": {
+          "size": 60,
+          "data": "PHA-SGkgU2FtLDwvcD48cD5DYW4geW91IGNvbmZpcm0gdGhlIFEzIG51bWJlcnMgYnkgbm9vbj88L3A-"
+        }
+      }
+    ]
+  }
+}

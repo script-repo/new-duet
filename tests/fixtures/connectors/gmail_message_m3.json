@@ -1,0 +1,31 @@
+{
+  "id": "m3",
+  "threadId": "t3",
+  "labelIds": [
+    "INBOX",
+    "UNREAD"
+  ],
+  "snippet": "Lunch?",
+  "internalDate": "1792332000000",
+  "payload": {
+    "mimeType": "text/plain",
+    "headers": [
+      {
+        "name": "From",
+        "value": "lee@example.org"
+      },
+      {
+        "name": "Subject",
+        "value": "Lunch tomorrow?"
+      },
+      {
+        "name": "Message-ID",
+        "value": "<lunch@example.org>"
+      }
+    ],
+    "body": {
+      "size": 10,
+      "data": "THVuY2ggdG9tb3Jyb3cgYXQgMTI_"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "kind": "calendar#events",
+  "items": [
+    {
+      "id": "e1",
+      "status": "confirmed",
+      "summary": "Old standup",
+      "updated": "2026-10-01T10:00:00.000Z",
+      "start": {
+        "dateTime": "2026-10-02T09:00:00-04:00"
+      },
+      "end": {
+        "dateTime": "2026-10-02T09:15:00-04:00"
+      }
+    }
+  ],
+  "nextSyncToken": "sync-1"
+}

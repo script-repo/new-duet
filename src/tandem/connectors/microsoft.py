@@ -128,7 +128,7 @@ class M365Connector(OAuthConnector):
             f"{GRAPH}/me/mailFolders/inbox/messages/delta",
             {
                 "$select": MAIL_SELECT,
-                "$filter": f"receivedDateTime ge {(now - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                "$filter": f"receivedDateTime ge {(now - timedelta(days=1)).astimezone(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}",
             },
         )
         events = [

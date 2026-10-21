@@ -1,0 +1,40 @@
+{
+  "id": "m2",
+  "threadId": "t2",
+  "labelIds": [
+    "INBOX",
+    "UNREAD",
+    "CATEGORY_PROMOTIONS"
+  ],
+  "snippet": "Fall sale",
+  "internalDate": "1792324800000",
+  "payload": {
+    "mimeType": "text/html",
+    "headers": [
+      {
+        "name": "From",
+        "value": "Shop <deals@shop.example>"
+      },
+      {
+        "name": "Subject",
+        "value": "Fall sale starts now"
+      },
+      {
+        "name": "Message-ID",
+        "value": "<sale-1@shop.example>"
+      },
+      {
+        "name": "List-Unsubscribe",
+        "value": "<mailto:unsub@shop.example>"
+      },
+      {
+        "name": "Precedence",
+        "value": "bulk"
+      }
+    ],
+    "body": {
+      "size": 30,
+      "data": "PGgxPkZhbGwgc2FsZTwvaDE-PHA-RXZlcnl0aGluZyBtdXN0IGdvPC9wPg"
+    }
+  }
+}
