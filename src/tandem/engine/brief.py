@@ -70,11 +70,10 @@ class BriefBuilder:
             "tasks_done": [{"id": t["id"], "title": t["title"], "summary": t.get("summary")} for t in done],
         }
 
-    async def run(self, now: datetime | None = None) -> dict[str, Any]:
+    def messages(self, data: dict[str, Any]) -> list[Message]:
+        """The brief prompt for gathered data (also used by `tandem eval brief`)."""
         rt = self.rt
-        now = now or rt.clock.now()
-        data = await self.gather(now)
-        msgs = [
+        return [
             Message(
                 "system",
                 prompts.BRIEF.format(user=rt.cfg.user_name or "the user", core=rt.memory.core_block()),
@@ -86,6 +85,12 @@ class BriefBuilder:
                 + "</data>",
             ),
         ]
+
+    async def run(self, now: datetime | None = None) -> dict[str, Any]:
+        rt = self.rt
+        now = now or rt.clock.now()
+        data = await self.gather(now)
+        msgs = self.messages(data)
         try:
             out = await rt.models.for_role("brief").complete_json(msgs)
         except Exception as exc:

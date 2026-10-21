@@ -104,9 +104,7 @@ class Triage:
                 verdicts.append(self._combine(ev, rules[ev["id"]], model_out.get(ev["id"])))
         return verdicts
 
-    async def _model(
-        self, batch: list[dict[str, Any]], rules: dict[str, RuleResult]
-    ) -> dict[str, dict[str, Any]]:
+    def messages(self, batch: list[dict[str, Any]], rules: dict[str, RuleResult]) -> list[Message]:
         payload = {
             "kind": "triage",
             "events": [
@@ -123,7 +121,7 @@ class Triage:
             ],
         }
         user = self.rt.cfg.user_name or "the user"
-        msgs = [
+        return [
             Message(
                 "system",
                 prompts.TRIAGE.format(
@@ -137,6 +135,11 @@ class Triage:
                 + "</data>",
             ),
         ]
+
+    async def _model(
+        self, batch: list[dict[str, Any]], rules: dict[str, RuleResult]
+    ) -> dict[str, dict[str, Any]]:
+        msgs = self.messages(batch, rules)
         try:
             out = await self.rt.models.for_role("triage").complete_json(msgs)
             results = out.get("results", out) if isinstance(out, dict) else out

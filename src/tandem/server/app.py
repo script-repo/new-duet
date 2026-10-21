@@ -23,6 +23,7 @@ from tandem import __version__
 from tandem.connectors.base import PushRequest
 from tandem.connectors.simple import WebhookAuthError
 from tandem.runtime import Runtime
+from tandem.server.routes_evals import evals_router
 
 log = logging.getLogger("tandem.server")
 STATIC_DIR = Path(__file__).parent / "static"
@@ -327,6 +328,8 @@ def create_app(rt: Runtime | None = None, run_scheduler: bool | None = None) -> 
     @app.get("/api/outbox", dependencies=[api])
     async def outbox() -> list[dict[str, Any]]:
         return runtime.outbox()
+
+    app.include_router(evals_router(runtime, api))
 
     # ---- webhooks (own HMAC auth, no bearer) -------------------------------------------------------------------
     @app.post("/api/webhooks/{connector}")

@@ -1,0 +1,28 @@
+# Context for examples/evals/triage.jsonl. Everything here is fictional.
+# `tandem eval triage` seeds this persona and these preferences into a throwaway memory, so rules
+# (VIPs, mutes) and the model see the same context they would in a real deployment.
+
+name: triage-v1
+description: >
+  150 synthetic but realistic inbound events for Jordan Lee, owner of Cedar Street Bikes (two shops),
+  over a working Tuesday. Email, calendar changes, Slack, payments and security alerts, each labeled
+  with the action a good assistant should take: ignore, brief (mention in tomorrow's brief),
+  notify (interrupt now), or act (handle it with a task; sends still need approval).
+now: "2026-10-20T09:00:00-04:00"  # the dataset's "now": Tuesday morning in Toronto
+timezone: America/Toronto
+user_name: Jordan
+memory:
+  - {kind: core, content: "The user is Jordan Lee, owner of Cedar Street Bikes (two locations: Main St and Riverside)."}
+  - {kind: core, content: "Staff: Ana Ruiz (Main St manager), Kofi Mensah (head mechanic), Lena Park (Riverside manager)."}
+  - {kind: preference, content: "vip: mira@brightwater.example, sam@ledgerwise.example, alex@cedarstreetbikes.example"}
+  - {kind: preference, content: "mute: deals@adblast.example, newsletter"}
+  - {kind: preference, content: "Interrupt me only when waiting until tomorrow morning would cost money, a customer, or a deadline."}
+  - {kind: preference, content: "Meeting requests from suppliers and landlords: propose two times from my calendar."}
+  - {kind: fact, content: "Sam Patel (Ledgerwise) is the bookkeeper. Mira Chen (Brightwater Capital) is an investor. Alex Lee is Jordan's partner (family)."}
+
+# Labels, for people writing new items:
+#   ignore  bulk, promotional, automated noise, phishing, things already handled
+#   brief   worth knowing, no decision needed before tomorrow morning
+#   notify  needs Jordan today: money or service at risk, a deadline in hours, a customer waiting, a VIP asking for something time-bound
+#   act     Tandem can do it end to end with a task (reply with times, send a reminder, draft a summary); sends still ask
+labels: [ignore, brief, notify, act]

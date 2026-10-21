@@ -97,6 +97,8 @@ class MockModel(ModelClient):
             out = {"summary": _short(" ".join(str(x) for x in (data or {}).get("messages", [])), 400)}
         elif kind == "reflect":
             out = self.reflect(data or {})
+        elif kind == "judge_brief":
+            out = self.judge_brief(data or {})
         elif self.role == "chat":
             return self.chat(messages, tools)
         else:
@@ -207,6 +209,43 @@ class MockModel(ModelClient):
         greet = f"Good morning{', ' + name if name else ''}. "
         greet += f"{len(running) + len(events)} things in progress and {needs_n} that need you."
         return {"greeting": greet, "items": items}
+
+    def judge_brief(self, data: dict[str, Any]) -> dict[str, Any]:
+        """A rule-based judge (for `tandem eval brief` in mock mode): keyword coverage, leaks, invented numbers."""
+        brief = data.get("brief") or {}
+        exp = data.get("expected") or {}
+        items = brief.get("items") or []
+        text = " ".join(
+            [str(brief.get("greeting", ""))] + [f"{i.get('topic', '')} {i.get('summary', '')}" for i in items]
+        ).lower()
+        groups = exp.get("must_mention") or []
+        hit = sum(1 for g in groups if any(a.lower() in text for a in g))
+        leaks = sum(1 for g in exp.get("must_not_mention") or [] if any(a.lower() in text for a in g))
+        facts = json.dumps(data.get("facts") or {}).lower()
+        numbers = re.findall(r"\d[\d,.:]*\d|\d", text)
+        invented = [n for n in numbers if len(n) > 1 and n not in facts]  # counts like "2 things" are fine
+        needs = [
+            str(i.get("topic", "")) + " " + str(i.get("summary", "")) for i in items if i.get("needs_you")
+        ]
+        want = exp.get("needs_you") or []
+        flagged = sum(1 for w in want if any(w.lower() in n.lower() for n in needs))
+        lengths = [len(str(i.get("summary", ""))) for i in items] or [0]
+
+        def score(x: float) -> int:
+            return max(1, min(5, round(1 + 4 * x)))
+
+        cov = hit / len(groups) if groups else 1.0
+        scores = {
+            "coverage": score(cov),
+            "prioritization": max(1, score(cov) - 2 * leaks),
+            "faithfulness": max(1, 5 - len(invented) - 2 * leaks),
+            "concision": 5 if max(lengths) <= 200 else 4 if max(lengths) <= 320 else 3,
+            "actionability": score(flagged / len(want)) if want else (5 if not needs else 4),
+        }
+        notes = f"Covered {hit}/{len(groups)} key points" + (f"; {leaks} leak(s)" if leaks else "")
+        if invented:
+            notes += f"; numbers not in the facts: {', '.join(invented[:3])}"
+        return {"scores": scores, "notes": notes + "."}
 
     def reflect(self, data: dict[str, Any]) -> dict[str, Any]:
         tool = data.get("tool", "a draft")

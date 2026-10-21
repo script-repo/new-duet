@@ -116,8 +116,19 @@ class Runtime:
             await self.checkin()
             await self.brief.run()
             self.store.kv_set("last_checkin", iso(self.clock.now()))
+        if self.cfg.demo_autoplay and self.cfg.mock and self.store.kv_get("eval:latest:triage") is None:
+            self.background(self._demo_eval())  # so the Evals page has numbers in the demo
         if run_scheduler:
             self.scheduler.start()
+
+    async def _demo_eval(self) -> None:
+        from tandem.evals import run_triage_eval, save_result
+
+        try:
+            save_result(self.store, self.settings.state_dir, await run_triage_eval("mock", self.cfg))
+            self.bus.publish("eval.updated", {"kind": "triage"})
+        except Exception as exc:
+            log.info("demo eval skipped: %s", exc)
 
     async def stop(self) -> None:
         await self.scheduler.stop()
