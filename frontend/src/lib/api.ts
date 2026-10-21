@@ -2,8 +2,8 @@
 
 import type { DecisionBody } from './approval';
 import type {
-  Activity, AppConfig, Approval, Artifact, AuditRow, Brief, MemoryEntry, Message, NotifySettings, PushSubscriptionInfo,
-  Skill, TEvent, Task, TaskLog, ThreadSnapshot, Today, VapidInfo,
+  Activity, AppConfig, Approval, Artifact, AuditRow, Brief, ConnectionsResponse, EvalsResponse, MemoryEntry, Message,
+  NotifySettings, PushSubscriptionInfo, Skill, TEvent, Task, TaskLog, ThreadSnapshot, Today, VapidInfo,
 } from './types';
 
 export class HttpError extends Error {
@@ -110,6 +110,11 @@ export const api = {
   testPush: () => json<{ delivered: number; subscriptions: number }>('POST', '/api/push/test'),
   notifySettings: () => json<NotifySettings>('GET', '/api/settings/notify'),
   saveNotifySettings: (changes: Partial<NotifySettings>) => json<NotifySettings>('PUT', '/api/settings/notify', changes),
+  connections: () => json<ConnectionsResponse>('GET', '/api/connections'),
+  authorizeConnection: (name: string) => json<{ url: string }>('POST', `/api/connections/${enc(name)}/authorize`),
+  disconnect: (name: string) => json<{ ok: boolean; revoked?: boolean }>('DELETE', `/api/connections/${enc(name)}`),
+  evals: () => json<EvalsResponse>('GET', '/api/evals'),
+  runTriageEval: (model: string) => json<{ started: boolean; model: string }>('POST', '/api/evals/triage/run', { model }),
   transcribe: (audio: Blob, filename: string) => {
     const form = new FormData();
     form.append('file', audio, filename);

@@ -90,3 +90,10 @@ export function outboxSections(data: unknown): OutboxSection[] {
     .filter(([, v]) => Array.isArray(v))
     .map(([name, v]) => ({ name, items: asItems(v as unknown[]) }));
 }
+
+/** "#/connections?connected=gmail" -> {path: "connections", params}; the query rides in the hash after OAuth. */
+export function splitHash(hash: string): { path: string; params: URLSearchParams } {
+  const h = hash.replace(/^#\/?/, '');
+  const q = h.indexOf('?');
+  return q < 0 ? { path: h, params: new URLSearchParams() } : { path: h.slice(0, q), params: new URLSearchParams(h.slice(q + 1)) };
+}

@@ -16,6 +16,7 @@ export const STREAM_EVENT_TYPES: readonly StreamEventType[] = [
   'event.created',
   'notify',
   'typing',
+  'eval.updated',
 ];
 
 const KNOWN = new Set<string>(STREAM_EVENT_TYPES);
