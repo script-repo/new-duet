@@ -174,7 +174,7 @@ async def test_expiry_denies():
 
 
 async def test_cancel_for_task_and_orphans():
-    reg, store, approvals, sent, _ = make_registry()
+    reg, store, approvals, _sent, _ = make_registry()
     task = asyncio.create_task(reg.invoke("email_send", {"to": "a"}, ToolContext(task_id="tk_1")))
     await eventually(lambda: store.list_approvals(state="pending"))
     approvals.cancel_for_task("tk_1")

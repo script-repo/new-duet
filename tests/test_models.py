@@ -72,7 +72,7 @@ async def test_anthropic_wire_format_and_tool_use(monkeypatch):
             },
         )
 
-    t, calls = transport(handler)
+    t, _calls = transport(handler)
     client = build_client(
         ModelProfile(name="s", provider="anthropic", model="claude-x", api_key_env="ANT_KEY"), transport=t
     )

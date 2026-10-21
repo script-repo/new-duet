@@ -75,7 +75,7 @@ async def test_fake_connector_tools():
     await tools["payments_pay"].func({"payee": "X", "amount": 10}, ctx)
     assert [o["type"] for o in fake.outbox] == ["email", "payment"]
     items = await fake.upcoming(local(0, 0), local(23, 59))
-    assert [i.title for i in items][0] == "Team standup"
+    assert next(i.title for i in items) == "Team standup"
 
 
 # ---- other connectors ---------------------------------------------------------------------------------------------
