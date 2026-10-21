@@ -22,6 +22,10 @@ Claude Code or Codex). With no API key at all it runs a complete offline demo.
 |---|---|
 | ![Tandem on desktop, mock mode](docs/screenshots/desktop.png) | ![Tandem on a phone, mock mode](docs/screenshots/mobile.png) |
 
+| Connections | Evals |
+|---|---|
+| ![Connections: Gmail, Google Calendar, Slack and Microsoft 365](docs/screenshots/connections.png) | ![Evals: triage metrics and confusion matrix](docs/screenshots/evals.png) |
+
 ## Contents
 
 - [What it does](#what-it-does)
