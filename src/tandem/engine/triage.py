@@ -33,6 +33,9 @@ SECURITY = re.compile(
 )
 BULK = re.compile(r"\b(unsubscribe|newsletter|% off|limited time|promo|webinar invite|no-?reply)\b", re.I)
 
+# Provider classifications that mean bulk: Gmail categories, Outlook's Focused Inbox "Other".
+BULK_LABELS = {"CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL"}
+
 
 def u_max(a: str, b: str) -> str:
     return a if URGENCY.index(a) >= URGENCY.index(b) else b
@@ -58,7 +61,11 @@ def apply_rules(ev: dict[str, Any], vip: list[str], mute: list[str]) -> RuleResu
             r.flags.append("mute")
             r.force_action = "ignore"
             return r
-    if "list-unsubscribe" in headers or BULK.search(text):
+    data = ev.get("data") or {}
+    provider_bulk = bool(BULK_LABELS & set(data.get("labels") or [])) or (
+        data.get("inference_classification") == "other"
+    )
+    if "list-unsubscribe" in headers or provider_bulk or BULK.search(text):
         r.flags.append("bulk")
         r.force_action = "ignore"
         return r
