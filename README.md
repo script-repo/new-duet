@@ -28,6 +28,7 @@ Claude Code or Codex). With no API key at all it runs a complete offline demo.
 - [Quick start](#quick-start) (Linux, macOS, Windows, Docker)
 - [Configuration](#configuration)
 - [Models](#models) · [Harnesses](#harnesses) · [Connectors](#connectors)
+- [Evals and the quality loop](#evals-and-the-quality-loop)
 - [Approvals and security](#approvals-and-security)
 - [Architecture](#architecture)
 - [API](#api) · [Development](#development) · [Limits](#limits)
@@ -56,6 +57,11 @@ Design documents: [docs/PLAN.md](docs/PLAN.md) (plan, milestones, prior-art surv
 - **Memory and skills.** Core memory (who you are, how you like things) goes into every prompt;
   an archive is searchable. When you edit a draft before approving it, Tandem learns the
   preference. Skills are folders of Markdown instructions (`SKILL.md`) loaded on demand.
+- **Your real apps.** Gmail, Google Calendar, Slack and Microsoft 365 connect with one click
+  (OAuth with PKCE, tokens encrypted at rest), poll or take push, and act only through approvals.
+- **Measured, not guessed.** A labeled 150-event triage set and a brief rubric measure any model
+  (`tandem eval`), and optional OpenTelemetry traces let [ambientq](docs/QUALITY.md) grade what the
+  agent does every day.
 - **Policy-driven approvals.** A YAML file decides which tools run, ask or are denied. Silence
   never approves: an unanswered card expires as a denial. Every call is audited.
 
@@ -122,6 +128,10 @@ tandem brief                generate the morning brief now
 tandem task "instructions"  run one task (approve its cards in the UI)
 tandem config               print the effective configuration, without secrets
 tandem harnesses            list harnesses and whether each is available
+tandem eval triage --model M     measure triage on the labeled set (accuracy, confusion, missed urgent)
+tandem eval brief --model M --judge J   grade morning briefs with a second model
+tandem eval export|stats --since 7d     a real week as a labeling file; the pilot numbers
+tandem harness export [--check]  regenerate harness/ for quality tools (ambientq)
 ```
 
 ## Configuration
@@ -155,7 +165,7 @@ A full annotated example is in [examples/tandem.example.yaml](examples/tandem.ex
 | Key | Default | Meaning |
 |---|---|---|
 | `user_name`, `persona` | | Your name, and extra instructions added to every prompt |
-| `models.<name>` | from env keys, else mock | A model profile: `provider`, `model`, `base_url`, `api_key_env`, `temperature`, `max_tokens`, `timeout_s` |
+| `models.<name>` | from env keys, else mock | A model profile: `provider`, `model`, `base_url`, `api_key_env`, `temperature`, `max_tokens`, `timeout_s`, `extra_body` (provider-specific request fields, e.g. reasoning effort) |
 | `roles` | `triage→cheap`, others `→strong` | Which profile serves `triage`, `brief`, `chat`, `worker` |
 | `harness.default` | `builtin` | `builtin`, `deepagents`, `claude-sdk`, `openai-agents`, `cli` |
 | `harness.max_steps` / `max_concurrent` | `24` / `2` | Step budget per task; parallel tasks |
@@ -173,6 +183,7 @@ A full annotated example is in [examples/tandem.example.yaml](examples/tandem.ex
 | `voice.provider` | `none` | `openai_compatible` (Whisper API: `base_url`, `model`, `api_key_env`) or `mock` |
 | `policy` | `examples/policy.yaml` | Approval policy file |
 | `skills` | `[]` | Extra skill folders, besides `examples/skills` |
+| `telemetry` | off | `enabled`, `endpoint`, `headers_env`, `capture_content`, `team`: OpenTelemetry GenAI traces over OTLP/HTTP ([docs/QUALITY.md](docs/QUALITY.md)); or `TANDEM_TELEMETRY=1` |
 | `demo_autoplay` | on in mock mode | Run a check-in and brief at startup |
 
 ## Models
@@ -257,6 +268,29 @@ URL and use push with an `https` one. Setup per provider: [docs/CONNECTORS.md](d
 MCP is the first choice for anything else: point a connector at an MCP server and its tools are
 gated like the built-in ones. Webhook senders sign the raw body with HMAC-SHA256 in
 `X-Tandem-Signature: sha256=<hex>`.
+
+## Evals and the quality loop
+
+**Evals** answer "is this model good enough to triage my inbox?" before you trust it.
+`examples/evals/triage.jsonl` holds 150 labeled events (phishing, prompt injection, VIP small talk,
+duplicated alerts, real emergencies without trigger words); `briefs.jsonl` holds 10 brief scenarios.
+
+```bash
+uv run tandem eval triage --model mock                       # offline floor: 54% accuracy, 12 missed urgent
+uv run tandem eval triage --model anthropic/claude-haiku-5-5  # or openai/..., openai_compatible/... --base-url
+uv run tandem eval brief --model triage --judge openai/gpt-5-mini
+```
+
+It runs the real pipeline (rules, model, combine) and reports accuracy, a confusion matrix,
+precision and recall per label and for "interrupt" (notify + act), and the **missed urgent** ids.
+Results show on the **Evals** page. [docs/REAL-MODELS.md](docs/REAL-MODELS.md) has the bar to
+clear, a first real-model run, and a one-week pilot plan for NAI, Claude or GPT.
+
+**The quality loop** watches daily behavior: with `TANDEM_TELEMETRY=1`, Tandem emits OpenTelemetry
+GenAI traces, and `docker compose --profile quality up` runs
+[ambientq](https://github.com/script-repo/nai-recon/tree/ambientq) beside it to grade them against
+`harness.yaml` (Tandem's real prompts, tools and policy) and group problems into insights. See
+[docs/QUALITY.md](docs/QUALITY.md).
 
 ## Approvals and security
 
@@ -350,6 +384,7 @@ REST under `/api`, with live updates on `GET /api/stream` (SSE). The main routes
 | `POST /api/voice/transcribe` | Server-side speech to text (when `voice.provider` is set) |
 | `GET /api/push/vapid`, `GET/POST/DELETE /api/push/subscriptions`, `POST /api/push/test` | Web Push key, devices, test |
 | `GET/PUT /api/settings/notify` | Urgency bar, quiet hours, hourly cap, Web Push on/off, live |
+| `GET /api/evals`, `POST /api/evals/triage/run` | Latest eval results and history; run a triage eval (roles, profiles, `mock`, `noisy`) |
 
 The full list, entity shapes and event types are in [docs/SPEC.md §10](docs/SPEC.md#10-api).
 
@@ -361,6 +396,8 @@ uv run ruff check . && uv run ruff format --check .
 uv run pytest -q                          # unit + integration tests, all in mock mode
 uv run pytest -q tests/test_scripted_day.py   # the end-to-end acceptance day
 uv sync --extra deepagents --extra openai-agents && uv run pytest tests/test_harnesses.py
+uv sync --extra quality && uv run pytest tests/test_quality_ambientq.py   # ambientq grades Tandem's traces
+uv run tandem harness export              # after changing tools or policy (CI checks harness/ is current)
 TANDEM_TEST_DATABASE_URL=postgresql+psycopg://… uv run pytest -q   # the same suite on Postgres
 
 cd frontend
@@ -374,12 +411,19 @@ stays silent, a sandboxed task that builds a spreadsheet, an approval that is ed
 executed (and the edit learned as a preference), and a draft that expires as a denial.
 
 CI (`.github/workflows/ci.yml`) runs lint; tests on Linux (Python 3.11–3.13), macOS and Windows;
-the harness tests with the real Deep Agents and OpenAI Agents SDKs; the suite on Postgres; the
-frontend checks, tests and build; and a Docker build with a smoke test.
+the harness tests with the real Deep Agents and OpenAI Agents SDKs; the ambientq quality test; the
+suite on Postgres; the frontend checks, tests and build; and a Docker build with a smoke test.
 
 ## Limits
 
-Tandem is v0.1. Known gaps:
+Tandem is v0.2. Known gaps:
+
+- The Gmail, Google Calendar, Slack and Microsoft 365 connectors are tested against recorded
+  provider responses, not live accounts; Gmail push needs a Pub/Sub topic you create by hand.
+- Real models have been measured on one free model so far (see REAL-MODELS.md); the mock is a
+  floor, not a target.
+- Web Push is tested against a fake push service; delivery on real iOS and Android devices has not
+  been verified.
 
 - The Claude Agent SDK harness is tested against a fake SDK module; it needs Claude Code
   installed to run for real.

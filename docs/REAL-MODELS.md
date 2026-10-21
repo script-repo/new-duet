@@ -4,8 +4,8 @@ Everything in Tandem's test suite runs on the deterministic mock. That proves th
 judgment. This guide is how to find out whether a real model triages *your* inbox well, and how to run a
 one-week pilot without surprises.
 
-Nothing here has been run against a live model yet: the project has no model keys in CI. The commands
-and metrics are tested with the mock, a deterministic "noisy" fake, and recorded provider responses.
+CI has no model keys: the commands and metrics are tested with the mock, a deterministic "noisy" fake
+and recorded provider responses. One real run on a small free model is recorded in section 3.1.
 
 ## 1. What's ready
 
@@ -72,6 +72,42 @@ what you will deploy. `--json result.json` keeps everything; `--fail-under 0.8` 
 
 Grade briefs with a judge **from a different model family** than the writer: models are kinder to
 their own style.
+
+### 3.1 First real run (October 2026)
+
+A small free reasoning model through OpenRouter's OpenAI-compatible endpoint, run once on the full set:
+
+```bash
+uv run tandem eval triage --model openai_compatible/nvidia/nemotron-3.5-lightning:free \
+  --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY \
+  --max-tokens 16000 --extra-body '{"reasoning": {"effort": "low"}}'
+```
+
+| Metric | Mock (rules) | nemotron-3.5-lightning (free) | Bar |
+|---|---|---|---|
+| Accuracy | 0.54 | 0.58 | ≥ 0.75 |
+| Macro-F1 | | 0.53 | |
+| Interrupt precision | 0.71 | 0.75 | ≥ 0.70 |
+| Interrupt recall | 0.78 | 0.67 | ≥ 0.95 |
+| Missed urgent | 12 | 18 | ≤ 2 |
+| False alarms | 17 | 12 | |
+| `act` recall | | 0.23 (3 of 13) | |
+| Model failures (batch fell back to rules) | 0 | 1 of 8 | 0 |
+| Time, tokens | instant | 933 s, 17k in / 103k out | |
+
+What it shows:
+
+- **The harness works end to end on a real endpoint**: batching, JSON parsing, the rules floor and
+  the combine step, the error path (one batch of malformed JSON fell back to rules, as designed).
+- **A small model is not enough for triage.** It is more precise than the rules but misses more:
+  it pushes real requests down to `brief`, gets `act` right only 3 times in 13, and does worst on the
+  `vip` (0.36), `money` (0.43), `security` (0.43) and `trap` (0.43) tags.
+- **Reasoning models need room.** At `max_tokens: 4096` it spent the whole budget thinking and
+  returned nothing (`finish_reason: length`); Tandem now says so plainly. `extra_body` passes the
+  provider's reasoning-effort setting, and `--max-tokens` raises the budget.
+
+Next: the same command with a mid-size model (NAI Llama 3.1 70B, Claude Haiku, GPT mini) is the
+real baseline. Expect most of the gain on `act` recall and the trap tags.
 
 ### Bar to clear before the pilot
 

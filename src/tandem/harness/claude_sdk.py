@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from tandem import __version__
 from tandem.harness.base import Harness, HarnessContext, HarnessResult, TaskSpec, register_harness, steer_text
 
 # Built-in Claude Code tools and the tags Tandem's policy sees for them.
@@ -69,7 +70,7 @@ class ClaudeSdkHarness(Harness):
                 f"The Claude Agent SDK needs an Anthropic model profile, not {ctx.profile.provider}.",
                 ok=False,
             )
-        server = sdk.create_sdk_mcp_server(name="tandem", version="0.1.0", tools=sdk_tools(ctx, sdk))
+        server = sdk.create_sdk_mcp_server(name="tandem", version=__version__, tools=sdk_tools(ctx, sdk))
 
         async def can_use_tool(tool_name: str, tool_input: dict[str, Any], context: Any) -> Any:
             if tool_name.startswith("mcp__tandem__"):
