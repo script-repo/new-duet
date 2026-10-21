@@ -19,7 +19,7 @@ export async function showSystemNotification(n: NotifyPayload): Promise<void> {
   if (permission() !== 'granted') return;
   const opts: NotificationOptions = {
     body: n.body,
-    tag: n.message_id != null ? `tandem-${n.message_id}` : undefined,
+    tag: n.tag ?? (n.message_id != null ? `tandem-${n.message_id}` : undefined),
     icon: '/icon-192.png',
     badge: '/icon-192.png',
     data: { url: '/#/thread' },

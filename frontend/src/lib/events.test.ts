@@ -6,7 +6,7 @@ import * as f from './fixtures';
 
 describe('decodeStreamEvent', () => {
   it('decodes every SSE event type in the spec', () => {
-    expect(STREAM_EVENT_TYPES).toHaveLength(13);
+    expect(STREAM_EVENT_TYPES).toHaveLength(14);
     const ev = decodeStreamEvent('message.created', JSON.stringify(f.message(7)));
     expect(ev).toEqual({ type: 'message.created', data: f.message(7) });
     expect(decodeStreamEvent('task.log', JSON.stringify(f.log(1)))?.type).toBe('task.log');

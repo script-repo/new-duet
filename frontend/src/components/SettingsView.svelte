@@ -1,8 +1,8 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
+  import NotificationSettings from './NotificationSettings.svelte';
   import { api } from '../lib/api';
   import { dateTime, formatValue, relativeTime } from '../lib/format';
-  import { permission, requestPermission } from '../lib/notify';
   import { app, errorMessage } from '../lib/store.svelte';
   import type { AuditRow, MemoryEntry, Skill } from '../lib/types';
   import { describeMatch, outboxSections, type OutboxSection } from '../lib/ui';
@@ -13,7 +13,6 @@
   let audit = $state<AuditRow[] | null>(null);
   let outbox = $state<OutboxSection[] | null>(null);
   let errors = $state<Record<string, string>>({});
-  let perm = $state(permission());
   let busy = $state<string | null>(null);
 
   let memKind = $state('preference');
@@ -67,10 +66,6 @@
     busy = null;
   }
 
-  async function askPermission() {
-    perm = await requestPermission();
-  }
-
   function connectorStatus(s: unknown): { text: string; tone: string } {
     const text = typeof s === 'string' ? s : s && typeof s === 'object' && 'state' in s ? String((s as { state: unknown }).state) : formatValue(s);
     const tone = /ok|ready|connected|running|active/i.test(text) ? 'ok' : /error|fail|down/i.test(text) ? 'danger' : 'warn';
@@ -100,20 +95,13 @@
     </div>
   </div>
 
+  <nav class="more-links" aria-label="More">
+    <a href="#/connections"><Icon name="link" size={17} /><span>Connections</span><Icon name="chevron" size={16} /></a>
+    <a href="#/evals"><Icon name="flask" size={17} /><span>Evals</span><Icon name="chevron" size={16} /></a>
+  </nav>
+
   <div class="sections">
-    <section class="card pad" aria-labelledby="s-notify">
-      <h2 id="s-notify">Notifications</h2>
-      <p class="muted">Tandem stays quiet until something needs you. Allow system notifications to hear about it while the app is in the background.</p>
-      {#if perm === 'unsupported'}
-        <p class="faint">This browser doesn’t support notifications.</p>
-      {:else if perm === 'granted'}
-        <p><span class="badge ok"><Icon name="check" size={13} /> Allowed</span></p>
-      {:else if perm === 'denied'}
-        <p><span class="badge danger">Blocked</span> <span class="faint small">Change it in your browser’s site settings.</span></p>
-      {:else}
-        <button class="btn primary" onclick={askPermission}><Icon name="bell" size={15} /> Allow notifications</button>
-      {/if}
-    </section>
+    <NotificationSettings />
 
     {#if errors.config}<p class="empty" role="alert">{errors.config}</p>{/if}
     {#if cfg}
@@ -154,7 +142,7 @@
       </section>
 
       <section class="card pad" aria-labelledby="s-conn">
-        <h2 id="s-conn">Connectors</h2>
+        <div class="h-row"><h2 id="s-conn">Connectors</h2><a class="small" href="#/connections">Manage connections</a></div>
         {#if cfg.connectors.length}
           <ul class="rows">
             {#each cfg.connectors as c (c.name)}
@@ -293,6 +281,48 @@
 </div>
 
 <style>
+  .more-links {
+    display: none;
+  }
+  @media (max-width: 899px) {
+    .more-links {
+      display: grid;
+      margin: -8px 0 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .more-links a {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      min-height: 48px;
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 550;
+    }
+    .more-links a + a {
+      border-top: 1px solid var(--border);
+    }
+    .more-links a :global(svg:first-child) {
+      color: var(--accent);
+    }
+    .more-links a span {
+      flex: 1;
+    }
+    .more-links a :global(svg:last-child) {
+      color: var(--text-3);
+    }
+  }
+  .h-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+  }
   .title {
     display: flex;
     align-items: center;
@@ -306,6 +336,7 @@
   }
   .sections {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
   .pad {

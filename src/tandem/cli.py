@@ -178,9 +178,13 @@ def main(argv: list[str] | None = None) -> int:
         settings = Settings()
         if getattr(args, "no_scheduler", False):
             settings.autostart = False
+        # --host/--port also build the default public URL (OAuth redirect, push callbacks)
+        if getattr(args, "host", None):
+            settings.host = args.host
+        if getattr(args, "port", None):
+            settings.port = args.port
         rt = Runtime(settings)
-        host = getattr(args, "host", None) or settings.host
-        port = getattr(args, "port", None) or settings.port
+        host, port = settings.host, settings.port
         print(
             f"Tandem {__version__} ({'mock' if rt.cfg.mock else 'live'} mode) on http://{host}:{port}",
             file=sys.stderr,

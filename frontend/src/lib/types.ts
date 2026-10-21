@@ -153,6 +153,8 @@ export interface Today {
 }
 
 export interface ModelRole {
+  /** the profile name in tandem.yaml (`cheap`, `strong`) */
+  name?: string;
   provider: string;
   model: string;
   has_api_key: boolean;
@@ -281,6 +283,160 @@ export type StreamEvent =
   | { type: 'brief.created'; data: Brief }
   | { type: 'event.created'; data: TEvent }
   | { type: 'notify'; data: NotifyPayload }
-  | { type: 'typing'; data: { on: boolean } };
+  | { type: 'typing'; data: { on: boolean } }
+  | { type: 'eval.updated'; data: { kind: string; error?: string } };
 
 export type StreamEventType = StreamEvent['type'];
+
+// ---- connections (SPEC §15.3) ---------------------------------------------------------------------
+
+export type ConnectionStatus = 'ok' | 'disconnected' | 'error';
+
+/** One connector instance, OAuth or not (`GET /api/connections`). Never carries a token. */
+export interface Connection {
+  name: string;
+  type: string;
+  provider: string | null;
+  display_name: string;
+  oauth: boolean;
+  /** listed in tandem.yaml (false: offered because its client id env var is set) */
+  configured: boolean;
+  client_configured: boolean;
+  connected: boolean;
+  account: string | null;
+  scopes: string[];
+  expires_at: string | null;
+  status: ConnectionStatus | string;
+  error: string | null;
+  last_poll: string | null;
+  tools: string[];
+  push: { mode: 'push' | 'poll'; detail: string };
+}
+
+/** An OAuth connector type this server can offer. */
+export interface AvailableConnector {
+  type: string;
+  provider: string;
+  display_name: string;
+  default_name: string;
+  env: string[];
+  client_configured: boolean;
+  in_use: boolean;
+  docs: string;
+}
+
+export interface ConnectionsResponse {
+  connections: Connection[];
+  available: AvailableConnector[];
+  redirect_uri: string;
+  public_url: string;
+  push_capable: boolean;
+}
+
+// ---- evals (SPEC §15.5) ---------------------------------------------------------------------------
+
+export type TriageLabel = 'ignore' | 'brief' | 'notify' | 'act';
+
+export interface LabelScore {
+  precision: number;
+  recall: number;
+  f1: number;
+  support: number;
+}
+
+export interface TriageMetrics {
+  n: number;
+  accuracy: number;
+  macro_f1: number;
+  labels: TriageLabel[];
+  /** rows: gold label, columns: predicted label, in `labels` order */
+  confusion: number[][];
+  per_label: Record<string, LabelScore>;
+  interrupt: { precision: number; recall: number; f1: number; tp: number; fp: number; fn: number };
+  missed_urgent: number;
+  missed_urgent_ids: string[];
+  false_alarms: number;
+  false_alarm_ids: string[];
+  dropped: number;
+  dropped_ids: string[];
+  gold_counts: Record<string, number>;
+  pred_counts: Record<string, number>;
+  by_tag: Record<string, { n: number; accuracy: number }>;
+}
+
+export interface TriageError {
+  id: string;
+  title: string;
+  kind: string;
+  gold: TriageLabel;
+  pred: TriageLabel;
+  urgency: string;
+  reason: string;
+  decided_by: string;
+  gold_reason: string;
+  tags: string[];
+}
+
+export interface TriageSummary {
+  kind: 'triage';
+  model: string;
+  provider: string;
+  model_name: string;
+  dataset: string;
+  ran_at: string;
+  seconds: number;
+  usage: { input_tokens: number; output_tokens: number };
+  model_failures: number;
+  model_failure_details: unknown[];
+  metrics: TriageMetrics;
+  errors: TriageError[];
+}
+
+export type JudgeCriterion = 'coverage' | 'prioritization' | 'faithfulness' | 'concision' | 'actionability';
+
+export interface BriefScenario {
+  id: string;
+  title: string | null;
+  coverage?: string; // "2/3"
+  /** must-mention groups not covered; a group may be a list of alternatives */
+  missing?: (string | string[])[];
+  leaks?: (string | string[])[];
+  scores?: Partial<Record<JudgeCriterion, number>>;
+  notes?: string;
+  error?: string;
+}
+
+export interface BriefSummary {
+  kind: 'brief';
+  model: string;
+  judge: string;
+  dataset: string;
+  ran_at: string;
+  seconds: number;
+  usage?: { input_tokens: number; output_tokens: number };
+  metrics: {
+    n: number;
+    errors: number;
+    coverage: number | null;
+    leaks: number;
+    judge_means: Partial<Record<JudgeCriterion, number | null>>;
+    judge_overall: number | null;
+  };
+  scenarios: BriefScenario[];
+}
+
+export interface EvalHistoryEntry {
+  kind: 'triage' | 'brief' | string;
+  model: string;
+  ran_at: string | null;
+  /** triage: accuracy (0-1); brief: judge overall (1-5) */
+  headline: number | null;
+  missed_urgent: number | null;
+}
+
+export interface EvalsResponse {
+  triage: TriageSummary | null;
+  brief: BriefSummary | null;
+  history: EvalHistoryEntry[];
+  running?: string[];
+}
