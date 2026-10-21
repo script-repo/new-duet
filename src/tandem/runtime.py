@@ -22,7 +22,7 @@ from tandem.connectors.fake import FakeConnector
 from tandem.engine.brief import BriefBuilder
 from tandem.engine.builtin_tools import builtin_tools
 from tandem.engine.chat import ChatAgent
-from tandem.engine.notify import NotificationPolicy, Notifier
+from tandem.engine.notify import NotificationPolicy, Notifier, apply_notify_settings
 from tandem.engine.scheduler import Scheduler
 from tandem.engine.tasks import TaskManager
 from tandem.engine.triage import Triage
@@ -32,6 +32,7 @@ from tandem.memory import Memory, Skills
 from tandem.models import ModelRouter
 from tandem.models.base import Message
 from tandem.policy import Policy
+from tandem.push import TTL_TASK, PushService, approval_actions
 from tandem.sandbox import SandboxFactory
 from tandem.security import Redactor, SecretResolver
 from tandem.store import Store
@@ -76,8 +77,10 @@ class Runtime:
         self.connectors: dict[str, Connector] = build_connectors(
             self.cfg.connectors, self.clock, self.secrets, self.cfg.schedule.timezone
         )
+        apply_notify_settings(self.cfg.notify, self.store.kv_get("notify_settings") or {})
+        self.push = PushService(self, env)
         self.notify_policy = NotificationPolicy(self.cfg.notify, self.cfg.schedule.timezone, self.store)
-        self.notifier = Notifier(self.cfg.notify, self.store)
+        self.notifier = Notifier(self.cfg.notify, self.store, self.push)
         self.triage = Triage(self)
         self.brief = BriefBuilder(self)
         self.tasks = TaskManager(self)
@@ -164,11 +167,20 @@ class Runtime:
     async def _on_approval(self, ap: dict[str, Any], ctx: ToolContext) -> None:
         if ctx.origin == "brief":
             return  # the brief posts its drafts after the brief card
-        self.store.add_message(
+        msg = self.store.add_message(
             "agent", f"Needs your OK: {ap['title']}", {"type": "approval", "ref": ap["id"]}
         )
         if not self.notify_policy.quiet_now(self.clock.now()):
-            await self.notifier.push("Needs your OK", ap["title"], "high")
+            await self.notifier.push(
+                "Needs your OK",
+                ap["title"],
+                "high",
+                msg["id"],
+                approval_id=ap["id"],
+                tag=f"tandem-approval-{ap['id']}",
+                actions=approval_actions(ap.get("tags")),
+                ttl=int(self.policy.timeout_s),  # a card that expired is not worth delivering
+            )
 
     async def _on_edit(self, ap: dict[str, Any], new_args: dict[str, Any]) -> None:
         """Learn from the user's edit to a draft (reflection, after LangGraph's EAIA)."""
@@ -231,7 +243,25 @@ class Runtime:
         for art in arts[1:]:
             self.store.add_message("agent", art["title"], {"type": "artifact", "ref": art["id"]})
         if not self.notify_policy.quiet_now(self.clock.now()):
-            await self.notifier.push("Done" if ok else "Task failed", task["title"], "normal", msg["id"])
+            await self.notifier.push(
+                "Done" if ok else "Task failed", task["title"], "normal", msg["id"], ttl=TTL_TASK
+            )
+
+    def update_notify_settings(self, changes: dict[str, Any]) -> dict[str, Any]:
+        """`PUT /api/settings/notify`: stored in kv over tandem.yaml, applied to the live config at once."""
+        stored = {**(self.store.kv_get("notify_settings") or {}), **changes}
+        apply_notify_settings(self.cfg.notify, stored)
+        self.store.kv_set("notify_settings", stored)
+        return self.notify_settings()
+
+    def notify_settings(self) -> dict[str, Any]:
+        n = self.cfg.notify
+        return {
+            "min_urgency": n.min_urgency,
+            "quiet_hours": n.quiet_hours,
+            "max_per_hour": n.max_per_hour,
+            "push_enabled": n.push_enabled,
+        }
 
     # ---- check-ins -------------------------------------------------------------------------------------------
     async def checkin(self, now: datetime | None = None) -> dict[str, int]:
@@ -401,6 +431,11 @@ class Runtime:
                 "quiet_hours": cfg.notify.quiet_hours,
                 "max_per_hour": cfg.notify.max_per_hour,
                 "channels": [c.type for c in cfg.notify.channels],
+                "push": {
+                    "enabled": cfg.notify.webpush_on(),
+                    "subscriptions": self.push.count(),
+                    "vapid_public_key": self.push.public_key,
+                },
             },
             "sandbox": {
                 "mode": self.sandboxes.mode,

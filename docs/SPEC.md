@@ -624,8 +624,8 @@ A comment ping is sent every 15 s. Clients reconnect and refetch `/api/thread` +
 - The local sandbox cannot block network access; use Docker for untrusted work.
 - SDK harnesses depend on fast-moving third-party APIs; adapters are tested against fakes, and
   live runs need the vendor runtime and key.
-- Web Push to a closed PWA (VAPID) is not implemented; notifications reach an open app, ntfy or a
-  webhook.
+- Web Push (v0.2, §15.4) needs HTTPS (localhost excepted), the app on the Home Screen on iOS/iPadOS
+  16.4+, and a running browser on desktop; delivery is best effort through each vendor's push service.
 - Mock mode is scripted: it demonstrates flows, not intelligence.
 
 ## 13. Roadmap
@@ -749,23 +749,29 @@ buttons for Gmail and Calendar.
 
 - **VAPID** (RFC 8292): a P-256 key pair from `TANDEM_VAPID_PRIVATE_KEY` (PEM or raw base64url), else
   generated once and stored encrypted with the server key. `GET /api/push/vapid` → `{public_key, enabled}`.
+  Subject (`sub`) from `TANDEM_VAPID_SUBJECT` or `notify.vapid_subject` (default `mailto:tandem@localhost`);
+  the JWT's `aud` is the endpoint's origin and `exp` 12 h ahead.
 - **Subscriptions** table `push_subscriptions`: `id`, `endpoint` (unique), `p256dh`, `auth`, `label`
   (from the user agent), `created_at`, `last_ok_at`, `last_error`, `failures`.
-  `POST /api/push/subscriptions` (the browser's `PushSubscription.toJSON()`), `DELETE
-  /api/push/subscriptions` `{endpoint}`, `GET /api/push/subscriptions`, `POST /api/push/test`.
+  `POST /api/push/subscriptions` (the browser's `PushSubscription.toJSON()`; https endpoints only; the same
+  endpoint again updates it), `DELETE /api/push/subscriptions` `{endpoint}` or `{id}`, `GET
+  /api/push/subscriptions` (`id`, endpoint `host`, `label`, dates, `failures`; never keys), `POST
+  /api/push/test` → `{delivered, subscriptions}` (bypasses the policy: you send it yourself).
 - **Sending**: payload encrypted with `aes128gcm` (RFC 8291/8188), `Authorization: vapid t=<ES256 JWT>,
-  k=<public key>`, `TTL` (24 h; 4 h for task updates), `Urgency` from Tandem urgency
+  k=<public key>`, `TTL` (24 h; 4 h for task updates; the approval timeout for approval cards), `Urgency` from Tandem urgency
   (`low`→`low`, `normal`→`normal`, `high`/`critical`→`high`), `Topic` to collapse repeats. `404`/`410`
   delete the subscription; other failures count up and drop it after 5 in a row.
 - **Payload**: `{title, body, urgency, url, tag, message_id?, approval_id?, actions}`. The service worker
   shows it with actions **Approve** (only for approval cards whose tags are not `pay` or `delete`, posting
   the decision with the session cookie) and **Open** (focus or open the thread at that card).
-- **Policy**: Web Push is a notify channel (`type: webpush`), on by default when a subscription exists.
+- **Policy**: Web Push is a notify channel (`type: webpush`), on by default when a subscription exists and
+  `notify.push_enabled` is true; listing `channels` explicitly without a `webpush` entry turns it off.
   It only carries what the notification policy already decided to push, so quiet hours, `min_urgency`
   and the hourly cap apply unchanged. `ntfy` and `webhook` channels gain `when: always | fallback`;
   `fallback` fires only when no Web Push delivery succeeded.
 - **Runtime settings**: `GET/PUT /api/settings/notify` `{min_urgency, quiet_hours, max_per_hour,
-  push_enabled}`: stored in `kv`, override `tandem.yaml`, applied at once.
+  push_enabled}` (PUT takes any subset; `quiet_hours` `"HH:MM-HH:MM"` or `null`): stored in `kv`, override
+  `tandem.yaml`, applied at once.
 - **iOS**: Web Push works on iOS/iPadOS 16.4+ only for a PWA added to the Home Screen, and only after
   a user gesture asks permission. Action buttons show on long-press/expand; Android and desktop show them inline.
 
