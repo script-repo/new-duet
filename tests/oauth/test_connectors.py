@@ -211,7 +211,6 @@ async def test_calendar_watch_channel_and_token(make, http):
     watch = http.post(f"{CAL}/calendars/primary/events/watch").respond(
         json={"resourceId": "res-1", "expiration": "1793000000000"}
     )
-    http.get(f"{CAL}/calendars/primary").respond(json={"id": "sam@example.com"})
     await cal.on_connected()
     body = json.loads(watch.calls.last.request.content)
     assert body["type"] == "web_hook" and body["address"] == f"{PUBLIC}/api/webhooks/calendar"
@@ -485,4 +484,3 @@ async def test_m365_send_reply_and_event_go_through_the_gate(make, http):
     assert body["start"] == {"dateTime": "2026-10-22T14:00:00", "timeZone": "UTC"}
     assert body["attendees"][0]["emailAddress"]["address"] == "v@s.example"
     assert ms.send_tool == "outlook_send"
-

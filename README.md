@@ -142,6 +142,8 @@ environment variable that holds each one (`api_key_env`, `password_env`, `secret
 | `TANDEM_CORS_ORIGINS` | empty | Comma-separated origins, for a UI served elsewhere |
 | `TANDEM_LOG_LEVEL` | `info` | Uvicorn log level |
 | `TANDEM_AUTOSTART` | `true` | Run the scheduler inside `serve` |
+| `TANDEM_PUBLIC_URL` | `http://{host}:{port}` | How browsers and providers reach Tandem (OAuth redirect, push callbacks) |
+| `GOOGLE_CLIENT_ID`, `SLACK_CLIENT_ID`, `MS_CLIENT_ID` (+ `_SECRET`) | | OAuth apps for the connectors ([docs/CONNECTORS.md](docs/CONNECTORS.md)) |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, … | | Provider keys, read only by the server |
 
 ### tandem.yaml
@@ -239,6 +241,15 @@ the default in `tandem.yaml`, or per task from the composer.
 | `webhook` | `POST /api/webhooks/<name>`, HMAC-checked when `secret_env` is set | none | `secret_env` |
 | `filesystem` | new and changed files in a folder | `<name>_list`, `<name>_read`, `<name>_write` | `root`, `watch` |
 | `mcp` | any MCP server's tools, over stdio or streamable HTTP (extra `mcp`) | `<name>_<tool>`, tagged from the tool's name and annotations for policy | `command`/`args` or `url`, `env_from`, `headers_from`, `ask`, `poll_tool` |
+| `gmail` | new inbox mail (history; Pub/Sub push) | `<name>_search`, `_read`, `_send`, `_reply` | `pubsub_topic`, `push_token_env` |
+| `google_calendar` | new, changed and cancelled invites; Today's events | `<name>_list`, `_create` | `calendar_id` |
+| `slack` | DMs, group DMs, listed channels, mentions (Events API push) | `<name>_search`, `_history`, `_post` | `channels`, `signing_secret_env` |
+| `m365` | Outlook mail and calendar (Graph delta; change notifications) | `<name>_search`, `_read`, `_send`, `_reply`, `_calendar_list`, `_calendar_create` | `tenant` |
+
+The four OAuth connectors connect from the Connections screen: register an app with the provider,
+set its client id and secret (e.g. `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`) and `TANDEM_PUBLIC_URL`,
+press Connect. Tokens are encrypted at rest and never reach a model or the UI. They poll without a public
+URL and use push with an `https` one. Setup per provider: [docs/CONNECTORS.md](docs/CONNECTORS.md).
 
 MCP is the first choice for anything else: point a connector at an MCP server and its tools are
 gated like the built-in ones. Webhook senders sign the raw body with HMAC-SHA256 in
@@ -268,7 +279,7 @@ gated like the built-in ones. Webhook senders sign the raw body with HMAC-SHA256
 ```mermaid
 flowchart LR
   subgraph Sources
-    C1[Connectors<br/>fake · IMAP/SMTP · ICS/CalDAV · filesystem · MCP]
+    C1[Connectors<br/>Gmail · Calendar · Slack · M365 · IMAP/SMTP · ICS/CalDAV · filesystem · MCP]
     WH[Webhooks]
   end
   subgraph Tandem process
@@ -330,6 +341,7 @@ REST under `/api`, with live updates on `GET /api/stream` (SSE). The main routes
 | `GET /api/artifacts/{id}`, `/preview`, `/download` | Artifact metadata, a sandboxed HTML preview, the file |
 | `POST /api/checkin/run`, `POST /api/brief/run` | Run a check-in or the brief now |
 | `POST /api/webhooks/{name}` | Push an event into a webhook connector |
+| `GET /api/connections`, `POST /api/connections/{name}/authorize`, `DELETE /api/connections/{name}` | Connections: list, start an OAuth sign-in, disconnect |
 | `GET/POST/DELETE /api/memory`, `GET /api/skills` | Memory and skills |
 | `GET /api/activity`, `/api/events`, `/api/audit`, `/api/outbox`, `/api/config` | Timeline, triaged events, audit, demo outbox, effective config |
 | `POST /api/voice/transcribe` | Server-side speech to text (when `voice.provider` is set) |

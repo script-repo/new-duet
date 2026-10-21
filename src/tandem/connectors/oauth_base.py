@@ -339,10 +339,10 @@ class OAuthConnector(Connector):
         res = await self.verify_push(req)
         if res is not None:
             return res
-        hint = self.push_hint(req)
-        if self.rt is not None and self.connected:
-            self.rt.background(self._push_poll(hint))
-        return PushResult(status=self.push_status, body={"accepted": 0, "queued": True})
+        queued = self.rt is not None and self.connected
+        if queued:
+            self.rt.background(self._push_poll(self.push_hint(req)))
+        return PushResult(status=self.push_status, body={"accepted": 0, "queued": queued})
 
     push_status: ClassVar[int] = 200
 

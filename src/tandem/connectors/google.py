@@ -430,9 +430,7 @@ class GoogleCalendarConnector(OAuthConnector):
     def _events_url(self) -> str:
         return f"{CAL}/calendars/{self.calendar_id}/events"
 
-    async def fetch_account(self) -> str | None:
-        cal = await self._api("GET", f"{CAL}/calendars/{self.calendar_id}")
-        return cal.get("id")
+    # The account comes from the id_token (openid email); calendars.get would need a broader scope.
 
     # ---- polling ----
     def _normalize(self, ev: dict[str, Any]) -> InboundEvent | None:
