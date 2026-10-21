@@ -222,11 +222,52 @@ export interface AuditRow {
   detail: string | null;
 }
 
+export interface NotifyAction {
+  action: 'approve' | 'open' | string;
+  title: string;
+}
+
 export interface NotifyPayload {
   title: string;
   body: string;
   urgency: string;
   message_id: number | null;
+  approval_id?: string | null;
+  url?: string;
+  tag?: string | null;
+  actions?: NotifyAction[];
+}
+
+/** `GET /api/push/vapid` */
+export interface VapidInfo {
+  public_key: string;
+  enabled: boolean;
+}
+
+/** One device that turned on notifications (`/api/push/subscriptions`); never its keys or full endpoint. */
+export interface PushSubscriptionInfo {
+  id: string;
+  host: string | null;
+  label: string | null;
+  created_at: string;
+  last_ok_at: string | null;
+  last_error: string | null;
+  failures: number;
+}
+
+/** `GET/PUT /api/settings/notify` (PUT takes any subset; `quiet_hours: null` turns them off) */
+export interface NotifySettings {
+  min_urgency: 'low' | 'normal' | 'high' | 'critical';
+  quiet_hours: string | null; // "HH:MM-HH:MM"
+  max_per_hour: number;
+  push_enabled: boolean;
+}
+
+/** `AppConfig.notify.push` */
+export interface PushConfig {
+  enabled: boolean;
+  subscriptions: number;
+  vapid_public_key: string;
 }
 
 export type StreamEvent =

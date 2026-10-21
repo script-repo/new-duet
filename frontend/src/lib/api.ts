@@ -2,8 +2,8 @@
 
 import type { DecisionBody } from './approval';
 import type {
-  Activity, AppConfig, Approval, Artifact, AuditRow, Brief, MemoryEntry, Message, Skill, TEvent, Task, TaskLog,
-  ThreadSnapshot, Today,
+  Activity, AppConfig, Approval, Artifact, AuditRow, Brief, MemoryEntry, Message, NotifySettings, PushSubscriptionInfo,
+  Skill, TEvent, Task, TaskLog, ThreadSnapshot, Today, VapidInfo,
 } from './types';
 
 export class HttpError extends Error {
@@ -102,6 +102,14 @@ export const api = {
   skills: () => json<Skill[]>('GET', '/api/skills'),
   audit: (limit = 50) => json<AuditRow[]>('GET', `/api/audit${query({ limit })}`),
   outbox: () => json<unknown>('GET', '/api/outbox'),
+  vapid: () => json<VapidInfo>('GET', '/api/push/vapid'),
+  pushSubscriptions: () => json<PushSubscriptionInfo[]>('GET', '/api/push/subscriptions'),
+  addPushSubscription: (sub: PushSubscriptionJSON) => json<PushSubscriptionInfo>('POST', '/api/push/subscriptions', sub),
+  removePushSubscription: (by: { endpoint: string } | { id: string }) =>
+    json<{ ok: boolean }>('DELETE', '/api/push/subscriptions', by),
+  testPush: () => json<{ delivered: number; subscriptions: number }>('POST', '/api/push/test'),
+  notifySettings: () => json<NotifySettings>('GET', '/api/settings/notify'),
+  saveNotifySettings: (changes: Partial<NotifySettings>) => json<NotifySettings>('PUT', '/api/settings/notify', changes),
   transcribe: (audio: Blob, filename: string) => {
     const form = new FormData();
     form.append('file', audio, filename);
