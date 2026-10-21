@@ -31,6 +31,8 @@ fine-tuned triage models, a connector marketplace.
 
 ## 2. Milestones
 
+All eight milestones shipped in v0.2.0 (2026-10-21).
+
 | # | Milestone | Done when |
 |---|---|---|
 | M0 | Plan and spec | `docs/PLAN.md` and `docs/SPEC.md` on `main` |
@@ -128,5 +130,6 @@ Streams run in parallel on their own worktrees and branches (`v02-connectors`, `
 the shared seams (settings, runtime wiring, UI) and the merges.
 
 **What v0.2 still can't prove without credentials:** live OAuth consent screens, Pub/Sub and Graph push
-delivery to a public URL, real model accuracy, and iOS push on a device. REAL-MODELS.md and
+delivery to a public URL, real model accuracy beyond one small free model (REAL-MODELS.md §3.1), and
+iOS push on a device. REAL-MODELS.md and
 CONNECTORS.md describe how to check each one in a one-week pilot.
