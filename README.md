@@ -41,7 +41,9 @@ Design documents: [docs/PLAN.md](docs/PLAN.md) (plan, milestones, prior-art surv
   connectors; webhooks push events in at once. Each event is triaged into *ignore*, *brief*,
   *notify* or *act*: hard rules first (mute lists, VIPs, money, deadlines, security), then a cheap
   model. A notification policy pushes only what clears your urgency bar, coalesces bursts, holds
-  everything but critical during quiet hours, and rate-limits itself.
+  everything but critical during quiet hours, and rate-limits itself. Notifications reach your phone
+  or desktop by Web Push even with the app closed (iOS 16.4+ from the Home Screen), or ntfy/webhooks
+  ([docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md)).
 - **Morning brief.** At `brief_at` a strong model turns overnight events, today's calendar,
   pending approvals and running tasks into a short brief. Replies it drafts become approval cards,
   ready to approve, edit or reject.
@@ -160,7 +162,8 @@ A full annotated example is in [examples/tandem.example.yaml](examples/tandem.ex
 | `schedule.checkin_every` / `brief_at` / `timezone` | `15m` / `07:30` / `UTC` | Check-in interval, brief time, timezone |
 | `notify.min_urgency` | `high` | Lowest urgency that interrupts you (`low`…`critical`) |
 | `notify.quiet_hours` / `max_per_hour` | `21:00-07:00` / `4` | Only critical gets through when quiet; rate limit |
-| `notify.channels` | `[{type: ui}]` | Add `{type: ntfy, url}` or `{type: webhook, url}` for phone pushes |
+| `notify.channels` | `ui` + `webpush` | Add `{type: ntfy, url}` or `{type: webhook, url}`, optionally `when: fallback` (only when Web Push didn't deliver); listing channels without `webpush` turns Web Push off |
+| `notify.push_enabled` / `vapid_subject` | `true` / `mailto:tandem@localhost` | Web Push on/off; the VAPID contact (`TANDEM_VAPID_SUBJECT`, key in `TANDEM_VAPID_PRIVATE_KEY` or generated) |
 | `connectors` | demo + webhook in mock mode | List of connectors (below) |
 | `sandbox.mode` | `auto` | `docker`, `local`, or `auto` (Docker if reachable) |
 | `sandbox.image` / `network` / `memory` / `cpus` / `exec_timeout_s` | `python:3.13-slim` / `false` / `1g` / `1` / `120` | Docker sandbox limits |
@@ -333,6 +336,8 @@ REST under `/api`, with live updates on `GET /api/stream` (SSE). The main routes
 | `GET/POST/DELETE /api/memory`, `GET /api/skills` | Memory and skills |
 | `GET /api/activity`, `/api/events`, `/api/audit`, `/api/outbox`, `/api/config` | Timeline, triaged events, audit, demo outbox, effective config |
 | `POST /api/voice/transcribe` | Server-side speech to text (when `voice.provider` is set) |
+| `GET /api/push/vapid`, `GET/POST/DELETE /api/push/subscriptions`, `POST /api/push/test` | Web Push key, devices, test |
+| `GET/PUT /api/settings/notify` | Urgency bar, quiet hours, hourly cap, Web Push on/off, live |
 
 The full list, entity shapes and event types are in [docs/SPEC.md §10](docs/SPEC.md#10-api).
 
@@ -366,7 +371,8 @@ Tandem is v0.1. Known gaps:
 
 - The Claude Agent SDK harness is tested against a fake SDK module; it needs Claude Code
   installed to run for real.
-- No Web Push (VAPID) yet: phone notifications go through ntfy or a webhook, or the open PWA.
+- Web Push needs HTTPS (localhost excepted) and, on iOS/iPadOS 16.4+, the app added to the Home
+  Screen; the browser must be running on desktop.
 - The local sandbox confines paths and limits resources, but does not isolate the network; use
   Docker for untrusted work.
 - Memory search is term overlap, not embeddings.

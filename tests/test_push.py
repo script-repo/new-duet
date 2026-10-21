@@ -290,6 +290,7 @@ async def test_approval_push_has_approve_except_for_pay(make_rt, pushmock):
     assert [a["action"] for a in send["actions"]] == ["approve", "open"]
     assert pay["approval_id"] == "ap_pay1" and [a["action"] for a in pay["actions"]] == ["open"]
     assert dev.headers[0]["topic"].endswith("ap_send1")
+    assert dev.headers[0]["ttl"] == str(int(rt.policy.timeout_s))
 
 
 async def test_settings_change_behaviour_live(make_rt, pushmock):

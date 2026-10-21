@@ -168,6 +168,7 @@ class Runtime:
                 approval_id=ap["id"],
                 tag=f"tandem-approval-{ap['id']}",
                 actions=approval_actions(ap.get("tags")),
+                ttl=int(self.policy.timeout_s),  # a card that expired is not worth delivering
             )
 
     async def _on_edit(self, ap: dict[str, Any], new_args: dict[str, Any]) -> None:
