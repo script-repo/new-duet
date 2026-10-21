@@ -1,0 +1,4 @@
+node_modules/
+frontend/dist/
+src/tandem/server/static/*
+!src/tandem/server/static/.gitkeep

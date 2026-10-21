@@ -1,0 +1,23 @@
+{
+  "name": "Tandem",
+  "short_name": "Tandem",
+  "description": "A proactive agent that stays quiet until you're needed.",
+  "id": "/",
+  "start_url": "/#/thread",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f3ee",
+  "theme_color": "#b2532e",
+  "categories": ["productivity"],
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Today", "url": "/#/today", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Activity", "url": "/#/activity", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
