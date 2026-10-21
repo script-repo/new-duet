@@ -2,6 +2,7 @@
 
 import { api, HttpError, onUnauthorized, THREAD_PAGE } from './api';
 import { showSystemNotification } from './notify';
+import { currentSubscriptionId } from './push';
 import {
   applyActivity, applyApproval, applyArtifacts, applyEvent, applySnapshot, applyTask, applyTaskDetail, applyToday,
   emptyState, type State,
@@ -9,9 +10,10 @@ import {
 import { connectStream } from './stream';
 import type { Approval, AppConfig, Artifact, NotifyPayload, StreamEvent, Task } from './types';
 import type { DecisionBody } from './approval';
+import { splitHash } from './ui';
 
-export type Route = 'thread' | 'today' | 'activity' | 'library' | 'settings';
-export const ROUTES: Route[] = ['thread', 'today', 'activity', 'library', 'settings'];
+export type Route = 'thread' | 'today' | 'activity' | 'library' | 'settings' | 'connections' | 'evals';
+export const ROUTES: Route[] = ['thread', 'today', 'activity', 'library', 'settings', 'connections', 'evals'];
 
 export interface Toast {
   id: number;
@@ -28,8 +30,8 @@ export function errorMessage(err: unknown): string {
 }
 
 function routeFromHash(): Route {
-  const h = typeof location !== 'undefined' ? location.hash.replace(/^#\/?/, '') : '';
-  return (ROUTES as string[]).includes(h) ? (h as Route) : 'thread';
+  const { path } = splitHash(typeof location !== 'undefined' ? location.hash : '');
+  return (ROUTES as string[]).includes(path) ? (path as Route) : 'thread';
 }
 
 class AppStore {
@@ -48,6 +50,7 @@ class AppStore {
   preview = $state<Artifact | null>(null);
 
   private stopStream: (() => void) | null = null;
+  private listeners = new Set<(ev: StreamEvent) => void>();
   private toastSeq = 0;
   private clock: ReturnType<typeof setInterval> | undefined;
 
@@ -130,11 +133,19 @@ class AppStore {
   dispatch(ev: StreamEvent): void {
     this.data = applyEvent(this.data, ev);
     if (ev.type === 'notify') this.onNotify(ev.data);
+    for (const fn of this.listeners) fn(ev);
+  }
+
+  /** Hear every stream event (a page refetching on `eval.updated`, say); returns the unsubscribe. */
+  listen(fn: (ev: StreamEvent) => void): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
   }
 
   private onNotify(n: NotifyPayload): void {
     this.toast({ title: n.title, body: n.body, urgency: n.urgency, kind: 'notify' });
-    if (typeof document !== 'undefined' && document.hidden) void showSystemNotification(n);
+    // a device with Web Push gets it from the service worker; showing it here too would double it
+    if (typeof document !== 'undefined' && document.hidden && !currentSubscriptionId()) void showSystemNotification(n);
   }
 
   toast(t: Omit<Toast, 'id'>, ms = t.kind === 'error' ? 8000 : 6000): void {

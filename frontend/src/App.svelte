@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ConnectionsView from './components/ConnectionsView.svelte';
+  import EvalsView from './components/EvalsView.svelte';
   import ActivityView from './components/ActivityView.svelte';
   import Icon from './components/Icon.svelte';
   import LibraryView from './components/LibraryView.svelte';
@@ -18,12 +20,19 @@
     { route: 'today', label: 'Today', icon: 'today' },
     { route: 'activity', label: 'Activity', icon: 'activity' },
     { route: 'library', label: 'Library', icon: 'library' },
+    { route: 'connections', label: 'Connections', icon: 'link' },
+    { route: 'evals', label: 'Evals', icon: 'flask' },
     { route: 'settings', label: 'Settings', icon: 'settings' },
   ];
-  const TABS = NAV.filter((n) => n.route !== 'settings');
+  // phones: four tabs; Connections and Evals are linked from Settings
+  const TABS = NAV.filter((n) => !['settings', 'connections', 'evals'].includes(n.route));
+  const UNDER_SETTINGS: Route[] = ['settings', 'connections', 'evals'];
 
   const needs = $derived(pendingApprovals(app.data).length);
-  const titles: Record<Route, string> = { thread: 'Tandem', today: 'Today', activity: 'Activity', library: 'Library', settings: 'Settings' };
+  const titles: Record<Route, string> = {
+    thread: 'Tandem', today: 'Today', activity: 'Activity', library: 'Library', settings: 'Settings', connections: 'Connections',
+    evals: 'Evals',
+  };
 
   $effect(() => {
     document.title = needs ? `(${needs}) Tandem` : app.route === 'thread' ? 'Tandem' : `${titles[app.route]} · Tandem`;
@@ -58,7 +67,7 @@
     <header class="topbar">
       <div class="brand"><Logo size={28} /><span>Tandem</span></div>
       <span class="led" class:on={app.connected} title={app.connected ? 'Live' : 'Offline'}></span>
-      <a class="icon-btn" href="#/settings" aria-label="Settings" aria-current={app.route === 'settings' ? 'page' : undefined}><Icon name="settings" /></a>
+      <a class="icon-btn" href="#/settings" aria-label="Settings" aria-current={app.route === 'settings' ? 'page' : undefined} class:within={UNDER_SETTINGS.includes(app.route)}><Icon name="settings" /></a>
     </header>
 
     <main class="main" id="main">
@@ -78,6 +87,10 @@
         <ActivityView />
       {:else if app.route === 'library'}
         <LibraryView />
+      {:else if app.route === 'connections'}
+        <ConnectionsView />
+      {:else if app.route === 'evals'}
+        <EvalsView />
       {:else}
         <SettingsView />
       {/if}
@@ -254,7 +267,8 @@
       font-size: 18px;
       flex: 1;
     }
-    .topbar a[aria-current='page'] {
+    .topbar a[aria-current='page'],
+    .topbar a.within {
       color: var(--accent);
     }
     .tabbar {
