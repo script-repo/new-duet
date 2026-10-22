@@ -37,7 +37,7 @@ Claude Code or Codex). With no API key at all it runs a complete offline demo.
 - [Architecture](#architecture)
 - [API](#api) · [Development](#development) · [Limits](#limits)
 
-Design documents: [docs/PLAN.md](docs/PLAN.md) (plan, milestones, prior-art survey) and
+What changed in each release: [CHANGELOG.md](CHANGELOG.md). Design documents: [docs/PLAN.md](docs/PLAN.md) (plan, milestones, prior-art survey) and
 [docs/SPEC.md](docs/SPEC.md) (full specification).
 
 ## What it does
@@ -212,7 +212,11 @@ roles: {triage: cheap, brief: strong, chat: strong, worker: strong}
 ```
 
 Clients retry rate limits and server errors (honoring `Retry-After`), and JSON replies get one
-automatic repair attempt.
+automatic repair attempt. Reasoning models that spend the whole budget thinking (empty answer,
+`finish_reason: length`) get one retry with 4× the tokens (up to 64k) and low reasoning effort
+instead; `openai_compatible` profiles default to `max_tokens: 16000` for the same reason. On
+OpenRouter's free router (`model: openrouter/free`, `base_url: https://openrouter.ai/api/v1`) this
+needs no extra settings ([REAL-MODELS.md §3.2](docs/REAL-MODELS.md#32-live-test-on-openrouters-free-router)).
 
 ## Harnesses
 
@@ -424,7 +428,7 @@ Tandem is v0.2. Known gaps:
 
 - The Gmail, Google Calendar, Slack and Microsoft 365 connectors are tested against recorded
   provider responses, not live accounts; Gmail push needs a Pub/Sub topic you create by hand.
-- Real models have been measured on one free model so far (see REAL-MODELS.md); the mock is a
+- Real models have been measured only on free models so far (see REAL-MODELS.md); the mock is a
   floor, not a target.
 - Web Push is tested against a fake push service; delivery on real iOS and Android devices has not
   been verified.

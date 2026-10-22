@@ -12,7 +12,15 @@ from __future__ import annotations
 from typing import Any
 
 from tandem import __version__
-from tandem.harness.base import Harness, HarnessContext, HarnessResult, TaskSpec, register_harness, steer_text
+from tandem.harness.base import (
+    Harness,
+    HarnessContext,
+    HarnessResult,
+    TaskSpec,
+    register_harness,
+    steer_text,
+    tool_call_line,
+)
 
 # Built-in Claude Code tools and the tags Tandem's policy sees for them.
 BUILTIN_TAGS: dict[str, set[str]] = {
@@ -38,7 +46,7 @@ def sdk_tools(ctx: HarnessContext, sdk: Any) -> list[Any]:
 
         def make(name: str) -> Any:
             async def handler(args: dict[str, Any]) -> dict[str, Any]:
-                await ctx.log("tool", name)
+                await ctx.log("tool", tool_call_line(name, args))
                 outcome = await ctx.tools.invoke(name, args)
                 await ctx.log("result", f"{name}: {outcome.decision} - {outcome.text[:300]}")
                 return {"content": [{"type": "text", "text": outcome.text}], "is_error": not outcome.ok}

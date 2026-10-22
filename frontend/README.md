@@ -33,6 +33,19 @@ npm run icons    # re-render public/icon-*.png from the same geometry as public/
 | `public/` | Manifest, icons, `sw.js` (caches the shell; `/api` is network-only) |
 | `scripts/mock-server.mjs` | Dev-only fake API used for screenshots and manual testing (with a fake OAuth round trip and `mock-evals.json`) |
 
+**Screenshots** of the real app (`TANDEM_MOCK=1 uv run tandem serve`) with headless Chromium:
+
+```bash
+chromium --headless --no-sandbox --no-proxy-server --timeout=20000 --window-size=1280,800 \
+  --screenshot=desktop.png http://localhost:8000/
+```
+
+Use `--timeout`, not `--virtual-time-budget`: the SSE stream keeps the page busy, so virtual time never
+runs out. `--timeout` stops the page when it fires, which closes the stream, so the rail's status dot reads
+*Offline* in these shots. That is the shot, not the app: in a browser that keeps running (checked over
+the DevTools protocol) it reads *Live* within a second. `--no-proxy-server` keeps a proxy in the
+environment away from `localhost`.
+
 Design: warm neutrals with one clay accent, serif display type for greetings and headings, light and dark
 from `prefers-color-scheme`. Left rail at ≥ 900 px, plus a Today panel beside the Thread at ≥ 1280 px;
 bottom tabs on phones with Settings in the header; on phones Connections and Evals open from the top of Settings.

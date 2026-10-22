@@ -65,6 +65,7 @@ class Settings(BaseSettings):
 
 ProviderName = Literal["mock", "anthropic", "openai", "openai_compatible", "gemini", "ollama"]
 ROLES = ("triage", "brief", "chat", "worker")
+OPENAI_COMPATIBLE_MAX_TOKENS = 16000
 
 
 class ModelProfile(BaseModel):
@@ -79,6 +80,13 @@ class ModelProfile(BaseModel):
     timeout_s: float = 120.0
     name: str = ""
     extra_body: dict[str, Any] = Field(default_factory=dict)  # merged into each request (reasoning effort...)
+
+    @model_validator(mode="after")
+    def _default_max_tokens(self) -> ModelProfile:
+        # Compatible servers often front reasoning models that think for thousands of tokens first.
+        if "max_tokens" not in self.model_fields_set and self.provider == "openai_compatible":
+            self.max_tokens = OPENAI_COMPATIBLE_MAX_TOKENS
+        return self
 
     def api_key(self) -> str | None:
         return os.environ.get(self.api_key_env) if self.api_key_env else None

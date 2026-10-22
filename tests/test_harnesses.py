@@ -175,6 +175,16 @@ async def test_claude_sdk_harness_wiring(rt, monkeypatch):
     assert type(fake.seen["read_perm"]).__name__ == "Allow"
     assert done["artifact_ids"]
     assert any(a["tool"] == "claude_read" for a in rt.store.list_audit())
+    tool_logs = [log["text"] for log in rt.store.task_logs(task["id"]) if log["kind"] == "tool"]
+    assert any(t.startswith("artifact_create(") and "=" in t for t in tool_logs), tool_logs
+
+
+def test_tool_call_line_shortens_and_flattens():
+    from tandem.harness.base import tool_call_line
+
+    line = tool_call_line("email_send", {"to": "sam@x.example", "body": "a\n" + "b" * 80})
+    assert line.startswith("email_send(to=sam@x.example, body=a b") and line.endswith("…)")
+    assert tool_call_line("noop", None) == "noop()"
 
 
 async def test_deepagents_harness_real(rt):
@@ -191,6 +201,9 @@ async def test_openai_agents_harness_real(rt):
     done = await rt.tasks.wait(task["id"], 60)
     assert done["state"] == "done", done
     assert done["artifact_ids"]
+    tool_logs = [log["text"] for log in rt.store.task_logs(task["id"]) if log["kind"] == "tool"]
+    assert tool_logs and all("(" in t and t.endswith(")") for t in tool_logs)
+    assert any("=" in t for t in tool_logs), tool_logs  # arguments, not just the tool's name
 
 
 async def test_openai_bridge_round_trip(rt):

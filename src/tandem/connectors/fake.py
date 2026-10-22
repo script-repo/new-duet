@@ -16,6 +16,9 @@ from tandem.config import examples_dir
 from tandem.connectors.base import CalendarItem, Connector, InboundEvent, register_connector
 from tandem.tools import Tool, ToolContext, schema
 
+# Values a model sends to mean "no filter".
+NO_FILTER = {"", "all", "any", "*"}
+
 
 def _at(day: datetime, spec: str) -> datetime:
     """`"09:10"` today, `"-22:10"` yesterday at 22:10, relative to local midnight `day`."""
@@ -199,7 +202,15 @@ class FakeConnector(Connector):
             Tool(
                 "payments_list",
                 "List this week's payments and payouts (date, customer, amount, status).",
-                schema({"status": {"type": "string"}}),
+                schema(
+                    {
+                        "status": {
+                            "type": "string",
+                            "enum": ["paid", "overdue", "failed", "pending", "all"],
+                            "description": "Only payments with this status; omit or 'all' for every payment.",
+                        }
+                    }
+                ),
                 self._payments_list,
                 title="Read payments",
             ),
@@ -301,8 +312,11 @@ class FakeConnector(Connector):
     async def _payments_list(self, args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
         day = self._today()
         rows = []
+        status = str(args.get("status") or "").strip().lower()
+        if status in NO_FILTER:
+            status = ""
         for p in self.data.get("payments", []):
-            if args.get("status") and p["status"] != args["status"]:
+            if status and p["status"] != status:
                 continue
             rows.append(
                 {

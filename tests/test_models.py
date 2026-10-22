@@ -228,6 +228,114 @@ async def test_complete_json_repairs_once():
     assert m.n == 2
 
 
+def _length_then(answer: dict, status_on_retry: int = 200):
+    """An OpenAI-compatible server: empty content at the token cap first, then `answer`."""
+
+    def handler(req, n):
+        body = json.loads(req.content)
+        if n == 1:
+            return httpx.Response(
+                200,
+                json={
+                    "choices": [
+                        {"message": {"content": "", "reasoning": "hmm..."}, "finish_reason": "length"}
+                    ],
+                    "usage": {"prompt_tokens": 50, "completion_tokens": body["max_tokens"]},
+                },
+            )
+        if n == 2 and status_on_retry != 200:
+            return httpx.Response(status_on_retry, json={"error": "unknown field reasoning"})
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": json.dumps(answer)}, "finish_reason": "stop"}]}
+        )
+
+    return handler
+
+
+async def test_openai_compatible_out_of_tokens_retries_with_more_room():
+    t, calls = transport(_length_then({"ok": True}))
+    client = build_client(
+        ModelProfile(name="c", provider="openai_compatible", model="r1", base_url="http://x/v1"), transport=t
+    )
+    assert client.profile.max_tokens == 16000  # the openai_compatible default
+    assert await client.complete_json([Message("user", "x")]) == {"ok": True}
+    first, retry = (json.loads(c.content) for c in calls)
+    assert len(calls) == 2  # no "not valid JSON" repair prompt
+    assert first["max_tokens"] == 16000 and "reasoning" not in first
+    assert retry["max_tokens"] == 64000 and retry["reasoning"] == {"effort": "low"}
+    assert retry["messages"] == first["messages"]
+
+
+async def test_out_of_tokens_retry_keeps_configured_reasoning_and_caps_tokens():
+    t, calls = transport(_length_then({"ok": 1}))
+    client = build_client(
+        ModelProfile(
+            name="c",
+            provider="openai_compatible",
+            model="r1",
+            base_url="http://x/v1",
+            max_tokens=30000,
+            extra_body={"reasoning": {"effort": "medium"}},
+        ),
+        transport=t,
+    )
+    assert await client.complete_json([Message("user", "x")]) == {"ok": 1}
+    retry = json.loads(calls[1].content)
+    assert retry["max_tokens"] == 64000 and retry["reasoning"] == {"effort": "medium"}
+
+
+async def test_out_of_tokens_retry_drops_reasoning_when_the_server_rejects_it():
+    t, calls = transport(_length_then({"ok": 2}, status_on_retry=400))
+    client = build_client(
+        ModelProfile(
+            name="c", provider="openai_compatible", model="m", base_url="http://x/v1", max_tokens=1000
+        ),
+        transport=t,
+    )
+    assert await client.complete_json([Message("user", "x")]) == {"ok": 2}
+    third = json.loads(calls[2].content)
+    assert len(calls) == 3 and third["max_tokens"] == 4000 and "reasoning" not in third
+
+
+async def test_openai_out_of_tokens_uses_reasoning_effort(monkeypatch):
+    monkeypatch.setenv("OAI", "sk-proj-abcdefghijklmnop1234")
+    seen = []
+
+    def handler(req, n):
+        body = json.loads(req.content)
+        seen.append(body)
+        if n == 1:
+            return httpx.Response(
+                200, json={"choices": [{"message": {"content": None}, "finish_reason": "length"}]}
+            )
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": "hi"}, "finish_reason": "stop"}]}
+        )
+
+    t, _ = transport(handler)
+    client = build_client(
+        ModelProfile(name="o", provider="openai", model="gpt-x", api_key_env="OAI"), transport=t
+    )
+    assert client.profile.max_tokens == 4096  # only openai_compatible gets the bigger default
+    assert (await client.complete([Message("user", "x")])).text == "hi"
+    assert seen[1]["max_completion_tokens"] == 4096 * 4 and seen[1]["reasoning_effort"] == "low"
+
+
+async def test_out_of_tokens_twice_is_a_clear_error_not_a_repair_prompt():
+    def handler(req, n):
+        return httpx.Response(
+            200, json={"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}
+        )
+
+    t, calls = transport(handler)
+    client = build_client(
+        ModelProfile(name="c", provider="openai_compatible", model="m", base_url="http://x/v1"), transport=t
+    )
+    with pytest.raises(ValueError, match="max_tokens"):
+        await client.complete_json([Message("user", "x")])
+    assert len(calls) == 2
+
+
 def test_router_picks_cheap_for_triage():
     cfg = AppConfig(
         models={

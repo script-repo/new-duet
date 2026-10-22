@@ -72,3 +72,12 @@ def register_harness(cls: type[Harness]) -> type[Harness]:
 
 def steer_text(note: str) -> str:
     return f"[Steer from the user] {note}"
+
+
+def tool_call_line(name: str, args: dict[str, Any] | None) -> str:
+    """`email_send(to=sam@x.example, subject=…)` for the task log; the task's log_fn redacts secrets."""
+    parts = []
+    for k, v in (args or {}).items():
+        s = str(v).replace("\n", " ")
+        parts.append(f"{k}={s[:60] + '…' if len(s) > 60 else s}")
+    return f"{name}({', '.join(parts)})"

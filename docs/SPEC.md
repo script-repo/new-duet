@@ -1,6 +1,6 @@
 # Tandem: specification
 
-Status: v0.2.0 as built (v0.2 in [§15](#15-v02-real-apps-real-phones-real-measurements)), 2026-10-21. Companion to [PLAN.md](PLAN.md).
+Status: v0.2.1 as built (v0.2 in [§15](#15-v02-real-apps-real-phones-real-measurements)), 2026-10-21. Companion to [PLAN.md](PLAN.md).
 
 ## 1. Overview
 

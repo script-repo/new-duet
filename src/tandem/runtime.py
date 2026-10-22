@@ -117,6 +117,7 @@ class Runtime:
                 c.last_error = str(exc)
                 log.warning("connector %s failed to start: %s", c.name, exc)
             self.registry.extend(c.tools())
+        self.tasks.recover_orphans()  # after the connectors, so requeued tasks have their tools
         self._seed_demo()
         if not self.store.list_messages(limit=1):
             name = f" {self.cfg.user_name}" if self.cfg.user_name else ""

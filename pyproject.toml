@@ -1,6 +1,6 @@
 [project]
 name = "tandem-agent"
-version = "0.2.0"
+version = "0.2.1"
 description = "Tandem: an open, self-hosted proactive agent that works in the background and reaches out only when something needs you. Any model, any agent harness."
 readme = "README.md"
 license = { text = "Apache-2.0" }

@@ -55,6 +55,37 @@ class TaskManager:
         self._running[task["id"]] = asyncio.create_task(self._run_traced(task))
         return task
 
+    def recover_orphans(self) -> dict[str, int]:
+        """At startup: tasks a previous process left behind. Queued ones never started, so they run now;
+        running or waiting ones lost their harness mid-way, so they fail with a clear reason."""
+        counts = {"requeued": 0, "failed": 0}
+        store = self.rt.store
+        for task in store.list_tasks(state=["queued", "running", "waiting"], limit=1000):
+            if task["id"] in self._running:
+                continue
+            ok, reason = (False, "unknown harness")
+            if task["harness"] in HARNESSES:
+                ok, reason = get_harness(task["harness"]).availability()
+            if task["state"] == "queued" and ok:
+                self._steer[task["id"]] = asyncio.Queue()
+                self._running[task["id"]] = asyncio.create_task(self._run_traced(task))
+                store.add_activity(
+                    "task", f"Task requeued after a restart: {task['title']}", None, task["id"]
+                )
+                counts["requeued"] += 1
+                continue
+            note = "server restarted" if task["state"] != "queued" else f"server restarted; {reason}"
+            store.update_task(task["id"], state="failed", error=note, finished_at=store.now())
+            store.add_task_log(task["id"], "error", note)
+            store.add_activity("task", f"Failed: {task['title']}", note, task["id"], "error")
+            store.add_message(
+                "agent",
+                f"“{task['title']}” stopped when I restarted. Ask me to run it again if you still need it.",
+                {"type": "task", "ref": task["id"]},
+            )
+            counts["failed"] += 1
+        return counts
+
     async def wait(self, task_id: str, timeout: float = 60) -> dict[str, Any]:
         t = self._running.get(task_id)
         if t:

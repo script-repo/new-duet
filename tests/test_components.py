@@ -28,6 +28,7 @@ from tandem.connectors.fake import FakeConnector
 from tandem.connectors.mail import parse_message
 from tandem.connectors.mcp import content_text, tags_for
 from tandem.connectors.simple import FilesystemConnector, WebhookAuthError, WebhookConnector, sign
+from tandem.engine.brief import brief_counts, brief_greeting
 from tandem.engine.notify import NotificationPolicy, in_quiet_hours
 from tandem.engine.scheduler import due
 from tandem.engine.triage import apply_rules
@@ -68,6 +69,11 @@ async def test_fake_connector_tools():
     assert "lease renewal" in body["body"]
     pays = await tools["payments_list"].func({}, ctx)
     assert len(pays["payments"]) == 8
+    for everything in ("all", "ALL", "any", "", None):
+        assert len((await tools["payments_list"].func({"status": everything}, ctx))["payments"]) == 8
+    overdue = await tools["payments_list"].func({"status": "overdue"}, ctx)
+    assert [p["customer"] for p in overdue["payments"]] == ["Oakridge Cycling Club"]
+    assert "all" in tools["payments_list"].parameters["properties"]["status"]["enum"]
     cal = await tools["calendar_list"].func({"days": 3}, ctx)
     assert cal["events"] and cal["free_slots"]
     assert (await tools["crm_lookup"].func({"name": "sam"}, ctx))["email"] == "sam@ledgerwise.example"
@@ -334,6 +340,134 @@ def test_triage_rules():
     sec = apply_rules({"title": "New sign-in to your account", "body": ""}, vip, mute)
     assert sec.floor == "high"
     assert apply_rules({"title": "Lunch?", "body": "tomorrow"}, vip, mute).floor == "low"
+
+
+def _brief_event(rt, n: int, urgency: str = "normal") -> dict:
+    ev = rt.store.add_event(
+        {
+            "source": "x",
+            "kind": "email",
+            "external_id": f"b{n}",
+            "title": f"Item {n}",
+            "sender": "a@x.example",
+        }
+    )
+    return rt.store.update_event(ev["id"], status="brief", urgency=urgency, triage={"reason": f"r{n}"})
+
+
+async def test_failed_brief_only_consumes_what_it_showed(make_rt):
+    rt = make_rt()
+    await rt.start()
+    evs = [_brief_event(rt, n) for n in range(9)]
+    brief_model = rt.models.for_role("brief")
+    real = brief_model.complete_json
+
+    async def broken(*a, **k):
+        raise ValueError("used all max_tokens before answering")
+
+    brief_model.complete_json = broken  # type: ignore[method-assign]
+    first = await rt.brief.run()
+    assert len(first["items"]) == 7
+    status = {e["id"]: rt.store.get_event(e["id"])["status"] for e in evs}
+    assert sorted(status.values()).count("briefed") == 7 and list(status.values()).count("brief") == 2
+    left = {i for i, s in status.items() if s == "brief"}
+    assert any("plain summary" in a["title"] for a in rt.store.list_activity())
+
+    # The next brief still sees the two the fallback left out, even though they predate it.
+    brief_model.complete_json = real  # type: ignore[method-assign]
+    rt.clock.advance(hours=1)
+    data = await rt.brief.gather(rt.clock.now())
+    assert left <= {e["id"] for e in data["events"]}
+    await rt.brief.run()
+    assert all(rt.store.get_event(i)["status"] == "briefed" for i in left)
+    await rt.stop()
+
+
+async def test_brief_model_failure_before_delivery_consumes_nothing(make_rt):
+    rt = make_rt()
+    await rt.start()
+    evs = [_brief_event(rt, n) for n in range(3)]
+
+    def boom(*a, **k):
+        raise RuntimeError("db down")
+
+    rt.store.add_brief = boom  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError):
+        await rt.brief.run()
+    assert all(rt.store.get_event(e["id"])["status"] == "brief" for e in evs)
+    await rt.stop()
+
+
+def test_brief_greeting_counts_come_from_code():
+    data = {"tasks_running": [{"id": "t1"}], "approvals": [{"id": "ap1"}, {"id": "ap2"}]}
+    items = [
+        {"topic": "a", "needs_you": True, "approval_id": "ap1"},
+        {"topic": "b", "needs_you": True},
+        {"topic": "c", "needs_you": False},
+    ]
+    g = brief_greeting("Good morning, Sam! 0 things need you today. Coffee first.", "Sam", data, items)
+    assert g == "Good morning, Sam! Coffee first. 1 thing in progress and 3 that need you."
+    assert brief_counts(data, items) == (1, 3)  # 2 flagged items + ap2, which no item carries
+    assert brief_greeting("", None, {}, []) == "Good morning. 0 things in progress and 0 that need you."
+    assert brief_greeting("Three new items and no rush", "Al", {}, [{"needs_you": True}]).endswith(
+        "Good morning, Al. 0 things in progress and 1 that needs you."
+    )
+
+
+async def test_brief_greeting_matches_its_items_and_counts_triage_tasks(make_rt):
+    rt = make_rt()
+    await rt.start()
+    _brief_event(rt, 1, "high")
+    _brief_event(rt, 2)
+    task = rt.store.create_task("Reschedule the VIP call", "x", "builtin", origin="triage")
+    rt.store.update_task(task["id"], state="running")
+    acted = rt.store.add_event(
+        {
+            "source": "x",
+            "kind": "email",
+            "external_id": "vip",
+            "title": "From the VIP",
+            "sender": "vip@x.example",
+        }
+    )
+    rt.store.update_event(acted["id"], status="acted", urgency="high", triage={"reason": "handled"})
+    data = await rt.brief.gather(rt.clock.now())
+    assert acted["id"] in {e["id"] for e in data["events"]}
+
+    async def lying(*a, **k):
+        return {
+            "greeting": "Morning! 0 things in progress and 0 that need you.",
+            "items": [
+                {"topic": "Late fee", "summary": "Pay today.", "needs_you": True},
+                {"topic": "VIP", "summary": "On it.", "needs_you": True},
+                {"topic": "FYI", "summary": "Nothing to do.", "needs_you": False},
+            ],
+        }
+
+    rt.models.for_role("brief").complete_json = lying  # type: ignore[method-assign]
+    brief = await rt.brief.run()
+    pending = len(rt.store.list_approvals(state="pending"))
+    assert brief["greeting"] == f"Morning! 1 thing in progress and {2 + pending} that need you."
+    await rt.stop()
+
+
+async def test_restart_requeues_queued_tasks_and_fails_interrupted_ones(make_rt):
+    rt = make_rt()
+    queued = rt.store.create_task("Write a memo", "Write a short memo about the week", "builtin")
+    running = rt.store.create_task("Half done", "x", "builtin")
+    rt.store.update_task(running["id"], state="running")
+    waiting = rt.store.create_task("Waiting on OK", "x", "builtin")
+    rt.store.update_task(waiting["id"], state="waiting")
+    gone = rt.store.create_task("Old harness", "x", "nope")
+    await rt.start()
+    for t in (running, waiting, gone):
+        got = rt.store.get_task(t["id"])
+        assert got["state"] == "failed" and got["error"].startswith("server restarted"), got
+        assert got["finished_at"]
+    done = await rt.tasks.wait(queued["id"], 20)
+    assert done["state"] not in ("queued", "failed"), done
+    assert any("requeued" in a["title"] for a in rt.store.list_activity())
+    await rt.stop()
 
 
 async def test_triage_falls_back_to_rules_when_model_breaks(make_rt):

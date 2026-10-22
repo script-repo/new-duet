@@ -11,7 +11,15 @@ from __future__ import annotations
 import inspect
 from typing import Any
 
-from tandem.harness.base import Harness, HarnessContext, HarnessResult, TaskSpec, register_harness, steer_text
+from tandem.harness.base import (
+    Harness,
+    HarnessContext,
+    HarnessResult,
+    TaskSpec,
+    register_harness,
+    steer_text,
+    tool_call_line,
+)
 from tandem.models.base import Message, ModelClient, ToolCall, ToolSpec
 
 
@@ -106,7 +114,7 @@ def wrap_tools(ctx: HarnessContext) -> list[Any]:
 
     def make(name: str) -> Any:
         async def call(**kwargs: Any) -> str:
-            await ctx.log("tool", f"{name}({', '.join(f'{k}={str(v)[:40]}' for k, v in kwargs.items())})")
+            await ctx.log("tool", tool_call_line(name, kwargs))
             outcome = await ctx.tools.invoke(name, kwargs)
             await ctx.log("result", f"{name}: {outcome.decision} - {outcome.text[:300]}")
             return outcome.text

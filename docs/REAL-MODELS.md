@@ -5,7 +5,7 @@ judgment. This guide is how to find out whether a real model triages *your* inbo
 one-week pilot without surprises.
 
 CI has no model keys: the commands and metrics are tested with the mock, a deterministic "noisy" fake
-and recorded provider responses. One real run on a small free model is recorded in section 3.1.
+and recorded provider responses. Real runs on free models are recorded in sections 3.1 and 3.2.
 
 ## 1. What's ready
 
@@ -103,8 +103,39 @@ What it shows:
   it pushes real requests down to `brief`, gets `act` right only 3 times in 13, and does worst on the
   `vip` (0.36), `money` (0.43), `security` (0.43) and `trap` (0.43) tags.
 - **Reasoning models need room.** At `max_tokens: 4096` it spent the whole budget thinking and
-  returned nothing (`finish_reason: length`); Tandem now says so plainly. `extra_body` passes the
-  provider's reasoning-effort setting, and `--max-tokens` raises the budget.
+  returned nothing (`finish_reason: length`). Since v0.2.1 Tandem retries such an answer once with
+  4× the tokens and low reasoning effort, and `openai_compatible` defaults to 16k, so the flags above
+  are optional. `extra_body` still passes the provider's reasoning-effort setting.
+
+### 3.2 Live test on OpenRouter's free router
+
+`openrouter/free` routes each call to one of OpenRouter's free models. Tandem ran on it end to end
+(every role, the fake connector), first at v0.2.0 and again at v0.2.1 after the fixes it found
+(CHANGELOG.md). No `--max-tokens` or `--extra-body` at v0.2.1:
+
+```bash
+uv run tandem eval triage --model openai_compatible/openrouter/free \
+  --base-url https://openrouter.ai/api/v1 --api-key-env OPENROUTER_API_KEY --limit 30
+```
+
+| First 30 items | Mock (rules) | v0.2.0, `--max-tokens 16000` | v0.2.1, defaults |
+|---|---|---|---|
+| Accuracy | 0.667 | 0.567 | 0.500 |
+| Interrupt precision / recall | | | 0.68 / 1.00 |
+| Missed urgent | 1 | | 0 |
+| False alarms / dropped | 6 / 0 | | 6 / 4 |
+| Model failures | 0 | | 0 |
+| Time, tokens | instant | | 112 s, 3k in / 19k out |
+
+The router picks a different model per call, so a few points of accuracy either way is noise; the
+free router is not fit for triage (`act` recall 0 of 3, `vip` 2 of 6). What v0.2.1 changed is that it
+works with no tuning and no batch fell back to rules.
+
+The same run did a check-in (8 events: 3 notified, 2 ignored, 3 for the brief, 14 s), a brief (6
+items, 5 drafts as approval cards, 23 s; greeting "0 things in progress and 5 that need you",
+matching its items) and a chat turn that called `payments_list(status="all")` and answered with
+both the gross total ($17,069.90) and what was actually paid ($14,908.90) in 8 s. Cost: $0 (the
+key's `usage` did not move).
 
 Next: the same command with a mid-size model (NAI Llama 3.1 70B, Claude Haiku, GPT mini) is the
 real baseline. Expect most of the gain on `act` recall and the trap tags.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -29,10 +30,12 @@ class BriefBuilder:
         since = (
             last["created_at"] if last else (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
         )
+        # Items saved for the brief stay until a brief has shown them, even from before the last brief
+        # (a failed one); the rest are only what's new since then.
         events = [
             e
-            for e in store.list_events(status=["brief", "notified", "new"], limit=100)
-            if e["created_at"] >= since
+            for e in store.list_events(status=["brief", "notified", "new", "acted"], limit=100)
+            if e["status"] == "brief" or e["created_at"] >= since
         ]
         local = now.astimezone(self._tz())
         day_start = local.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -101,8 +104,11 @@ class BriefBuilder:
         now = now or rt.clock.now()
         data = await self.gather(now)
         msgs = self.messages(data)
+        shown: list[str] | None = None  # event ids the brief covered; None = all of them
         try:
             out = await rt.models.for_role("brief").complete_json(msgs)
+            if not isinstance(out, dict):
+                raise ValueError(f"brief model returned {type(out).__name__}, not an object")
         except Exception as exc:
             log.warning("brief model failed: %s", exc)
             rt.store.add_activity(
@@ -114,11 +120,12 @@ class BriefBuilder:
                     {
                         "topic": e["title"][:40],
                         "summary": e.get("summary") or "",
-                        "needs_you": e["urgency"] in ("high", "critical"),
+                        "needs_you": e["urgency"] in ("high", "critical") and e["status"] != "acted",
                     }
                     for e in data["events"][:7]
                 ],
             }
+            shown = [e["id"] for e in data["events"][:7]]
         items: list[dict[str, Any]] = []
         for raw in (out.get("items") or [])[:10]:
             if not isinstance(raw, dict):
@@ -133,12 +140,15 @@ class BriefBuilder:
                 ap = await rt.propose_draft(draft["tool"], dict(draft.get("args") or {}), origin="brief")
                 if ap:
                     item["approval_id"] = ap["id"]
+                    item["needs_you"] = True  # a draft waits for their OK
             items.append(item)
-        brief = rt.store.add_brief(data["date"], str(out.get("greeting") or "Good morning.")[:300], items)
-        for ev in data["events"]:
-            if ev["status"] == "brief":
-                rt.store.update_event(ev["id"], status="briefed")
+        greeting = brief_greeting(str(out.get("greeting") or ""), rt.cfg.user_name, data, items)
+        brief = rt.store.add_brief(data["date"], greeting, items)
         rt.store.add_message("agent", brief["greeting"], {"type": "brief", "ref": brief["id"]})
+        # Only now has the brief reached the thread: mark what it covered, so a failure keeps the rest.
+        for ev in data["events"]:
+            if ev["status"] == "brief" and (shown is None or ev["id"] in shown):
+                rt.store.update_event(ev["id"], status="briefed")
         for item in items:
             if item.get("approval_id"):
                 ap = rt.store.get_approval(item["approval_id"])
@@ -152,6 +162,38 @@ class BriefBuilder:
         if not rt.notify_policy.quiet_now(now):
             await rt.notifier.push("Your morning brief", brief["greeting"], "normal")
         return brief
+
+
+_COUNT_WORDS = r"(\d+|no|zero|one|two|three|four|five|six|seven|eight|nine|ten|a few|several)"
+_COUNT_CLAIM = re.compile(
+    _COUNT_WORDS + r"\b[^.!?]*\b(need|needs|progress|waiting|running|pending|new)\b", re.I
+)
+
+
+def brief_counts(data: dict[str, Any], items: list[dict[str, Any]]) -> tuple[int, int]:
+    """(in progress, need you), counted from the data and the final items, never by the model."""
+    attached = {i["approval_id"] for i in items if i.get("approval_id")}
+    waiting = [a for a in data.get("approvals", []) if a["id"] not in attached]
+    needs = sum(1 for i in items if i.get("needs_you")) + len(waiting)
+    return len(data.get("tasks_running", [])), needs
+
+
+def brief_greeting(
+    model_text: str, user_name: str | None, data: dict[str, Any], items: list[dict[str, Any]]
+) -> str:
+    """The model's greeting without any counts it made up, then the real counts."""
+    kept = [
+        s.strip()
+        for s in re.split(r"(?<=[.!?])\s+", model_text.strip())
+        if s.strip() and not _COUNT_CLAIM.search(s)
+    ]
+    head = " ".join(kept)[:200] or f"Good morning{', ' + user_name if user_name else ''}."
+    if head[-1] not in ".!?":
+        head += "."
+    running, needs = brief_counts(data, items)
+    things = "thing" if running == 1 else "things"
+    need = "needs" if needs == 1 else "need"
+    return f"{head} {running} {things} in progress and {needs} that {need} you."[:300]
 
 
 def _local_hhmm(iso_str: str | None, tz: ZoneInfo) -> str:

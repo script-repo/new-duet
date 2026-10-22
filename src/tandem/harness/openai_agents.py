@@ -11,7 +11,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from tandem.harness.base import Harness, HarnessContext, HarnessResult, TaskSpec, register_harness, steer_text
+from tandem.harness.base import (
+    Harness,
+    HarnessContext,
+    HarnessResult,
+    TaskSpec,
+    register_harness,
+    steer_text,
+    tool_call_line,
+)
 
 COMPATIBLE = ("openai", "openai_compatible", "ollama")
 
@@ -26,7 +34,7 @@ def function_tools(ctx: HarnessContext, agents: Any) -> list[Any]:
                     args = json.loads(raw or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                await ctx.log("tool", name)
+                await ctx.log("tool", tool_call_line(name, args))
                 outcome = await ctx.tools.invoke(name, args)
                 await ctx.log("result", f"{name}: {outcome.decision} - {outcome.text[:300]}")
                 return outcome.text

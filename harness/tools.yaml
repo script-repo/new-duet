@@ -475,6 +475,13 @@
       properties:
         status:
           type: string
+          enum:
+          - paid
+          - overdue
+          - failed
+          - pending
+          - all
+          description: Only payments with this status; omit or 'all' for every payment.
       required: []
   x-tandem:
     tags:

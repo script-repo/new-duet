@@ -6,8 +6,11 @@ API keys are read from the environment at call time and only ever go into reques
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Any
+
+import httpx
 
 from tandem.models.base import (
     Message,
@@ -20,6 +23,11 @@ from tandem.models.base import (
     dumps_args,
     loads_args,
 )
+
+log = logging.getLogger("tandem.models")
+
+# The largest max_tokens the out-of-tokens retry asks for.
+OUT_OF_TOKENS_CAP = 64000
 
 JSON_ONLY = "Respond with only a single JSON value. No prose, no code fences."
 
@@ -142,6 +150,27 @@ class OpenAIClient(ModelClient):
             f"model profile {self.profile.name!r}: base_url is required for provider openai_compatible"
         )
 
+    def _max_tokens_key(self) -> str:
+        return "max_completion_tokens" if self.profile.provider == "openai" else "max_tokens"
+
+    def out_of_tokens_retry(self, body: dict[str, Any], max_tokens: int) -> dict[str, Any]:
+        """The body for the one retry after an empty `finish_reason: length` answer."""
+        retry = dict(body)
+        retry[self._max_tokens_key()] = max(max_tokens, min(max_tokens * 4, OUT_OF_TOKENS_CAP))
+        if not any(k in body for k in ("reasoning", "reasoning_effort")):
+            if self.profile.provider == "openai":
+                retry["reasoning_effort"] = "low"
+            else:
+                retry["reasoning"] = {"effort": "low"}  # OpenRouter's form; most other servers ignore it
+        return retry
+
+    async def _post(
+        self, client: httpx.AsyncClient, url: str, body: dict[str, Any], headers: dict[str, str]
+    ) -> dict[str, Any]:
+        r = await client.post(url, json=body, headers=headers)
+        r.raise_for_status()
+        return r.json()
+
     def build_body(
         self,
         messages: list[Message],
@@ -176,7 +205,7 @@ class OpenAIClient(ModelClient):
                 out.append({"role": "user", "content": m.content})
         body: dict[str, Any] = {"model": self.profile.model, "messages": out}
         # OpenAI's newer models take max_completion_tokens; compatible servers mostly expect max_tokens.
-        body["max_completion_tokens" if self.profile.provider == "openai" else "max_tokens"] = max_tokens
+        body[self._max_tokens_key()] = max_tokens
         if tools:
             body["tools"] = [
                 {
@@ -207,18 +236,30 @@ class OpenAIClient(ModelClient):
             )
         headers = {"Authorization": f"Bearer {key or 'not-needed'}"}
         url = f"{self.base_url()}/chat/completions"
+        body = self.body(messages, tools, json_mode=json_mode, max_tokens=max_tokens, temperature=temperature)
         async with self._client() as client:
-            r = await client.post(
-                url,
-                json=self.body(
-                    messages, tools, json_mode=json_mode, max_tokens=max_tokens, temperature=temperature
-                ),
-                headers=headers,
-            )
-            r.raise_for_status()
-            data = r.json()
-        choice = (data.get("choices") or [{}])[0]
-        msg = choice.get("message") or {}
+            data = await self._post(client, url, body, headers)
+            choice = (data.get("choices") or [{}])[0]
+            msg = choice.get("message") or {}
+            if _out_of_tokens(choice, msg):
+                # A reasoning model spent the whole budget thinking and said nothing. A "not valid JSON"
+                # repair prompt would fail the same way: ask once more with room to answer and less thinking.
+                retry = self.out_of_tokens_retry(body, max_tokens)
+                log.info(
+                    "%s: empty answer at max_tokens=%s (finish_reason=length); retrying once with %s",
+                    self.profile.model,
+                    max_tokens,
+                    retry[self._max_tokens_key()],
+                )
+                try:
+                    data = await self._post(client, url, retry, headers)
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code != 400 or "reasoning" not in retry or "reasoning" in body:
+                        raise
+                    retry.pop("reasoning")  # a server that rejects the field: just more tokens
+                    data = await self._post(client, url, retry, headers)
+                choice = (data.get("choices") or [{}])[0]
+                msg = choice.get("message") or {}
         calls = [
             ToolCall(
                 id=tc.get("id") or f"call_{uuid.uuid4().hex[:8]}",
@@ -235,6 +276,14 @@ class OpenAIClient(ModelClient):
             data.get("model", self.profile.model),
             choice.get("finish_reason"),
         )
+
+
+def _out_of_tokens(choice: dict[str, Any], msg: dict[str, Any]) -> bool:
+    return (
+        choice.get("finish_reason") == "length"
+        and not (msg.get("content") or "").strip()
+        and not msg.get("tool_calls")
+    )
 
 
 # ---- Gemini -------------------------------------------------------------------------------------------------

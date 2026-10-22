@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from tandem.harness.base import Harness, HarnessContext, HarnessResult, TaskSpec, register_harness, steer_text
+from tandem.harness.base import (
+    Harness,
+    HarnessContext,
+    HarnessResult,
+    TaskSpec,
+    register_harness,
+    steer_text,
+    tool_call_line,
+)
 from tandem.models.base import Message
 
 
@@ -20,19 +28,11 @@ async def tool_loop(messages: list[Message], ctx: HarnessContext, max_steps: int
             return resp.text.strip(), step
         messages.append(Message("assistant", resp.text, tool_calls=resp.tool_calls))
         for call in resp.tool_calls:
-            await ctx.log("tool", f"{call.name}({_brief_args(call.args)})")
+            await ctx.log("tool", tool_call_line(call.name, call.args))
             outcome = await ctx.tools.invoke(call.name, call.args, call.id)
             await ctx.log("result", f"{call.name}: {outcome.decision} - {outcome.text[:300]}")
             messages.append(Message("tool", outcome.text, tool_call_id=call.id, name=call.name))
     return "Stopped: reached the step limit before finishing.", max_steps
-
-
-def _brief_args(args: dict) -> str:
-    parts = []
-    for k, v in args.items():
-        s = str(v).replace("\n", " ")
-        parts.append(f"{k}={s[:60] + '…' if len(s) > 60 else s}")
-    return ", ".join(parts)
 
 
 @register_harness
