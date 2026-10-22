@@ -67,7 +67,7 @@ describe('reducer: tasks', () => {
     let s = withToday();
     s = applyEvent(s, { type: 'task.created', data: f.task({ state: 'queued' }) });
     expect(s.today!.in_progress.map((t) => t.id)).toEqual(['tk_1']);
-    const done = f.task({ state: 'done', finished_at: new Date().toISOString() });
+    const done = f.task({ state: 'done', finished_at: '2026-10-21T15:00:00Z' }); // the fixture's Today date
     s = applyEvent(s, { type: 'task.updated', data: { ...done } });
     s = applyEvent(s, { type: 'task.updated', data: { ...done, summary: 'ok' } });
     expect(s.today!.in_progress).toEqual([]);
