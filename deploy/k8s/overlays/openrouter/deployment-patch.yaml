@@ -1,0 +1,24 @@
+# Explicit `env` beats every `envFrom` source (tandem-config and tandem-env), so live mode can't be
+# switched back off by a stray TANDEM_MOCK in .env.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tandem
+spec:
+  template:
+    spec:
+      containers:
+        - name: tandem
+          env:
+            - name: TANDEM_MOCK
+              value: "false"
+            - name: TANDEM_CONFIG
+              value: /config/tandem.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: tandem-yaml

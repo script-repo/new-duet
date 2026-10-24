@@ -1,0 +1,18 @@
+# Live mode on OpenRouter's free router (docs/REAL-MODELS.md §3.2). Schema: AppConfig in src/tandem/config.py,
+# example in examples/tandem.example.yaml. The key is read from OPENROUTER_API_KEY (secret tandem-env), never here.
+models:
+  cheap:   # triage / check-ins
+    provider: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    model: openrouter/free
+    api_key_env: OPENROUTER_API_KEY
+  strong:  # briefs, chat and tasks
+    provider: openai_compatible
+    base_url: https://openrouter.ai/api/v1
+    model: openrouter/free
+    api_key_env: OPENROUTER_API_KEY
+
+roles: {triage: cheap, brief: strong, chat: strong, worker: strong}
+
+sandbox:
+  mode: auto   # no docker in the image, so this is the local sandbox
