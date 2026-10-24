@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tandem
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # RWO volume + SQLite: never two pods on /data at once
+  template:
+    spec:
+      # The Service is named "tandem", so kubelet would inject TANDEM_PORT=tcp://<ip>:8000 and
+      # TANDEM_SERVICE_*; pydantic Settings reads TANDEM_* and crashes on `port`. Turn those off.
+      enableServiceLinks: false
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        runAsNonRoot: true
+      containers:
+        - name: tandem
+          image: ghcr.io/script-repo/new-duet:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: tandem-config
+            # Provider keys (ANTHROPIC_API_KEY, OPENAI_API_KEY, ...) from .env; optional.
+            - secretRef:
+                name: tandem-env
+                optional: true
+          env:
+            # Pinned explicitly so nothing injected can shadow them (see enableServiceLinks above).
+            - name: TANDEM_HOST
+              value: "0.0.0.0"
+            - name: TANDEM_PORT
+              value: "8000"
+            # Required: the pod will not start until secret tandem-auth exists (README.md).
+            - name: TANDEM_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: tandem-auth
+                  key: token
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: tandem-data

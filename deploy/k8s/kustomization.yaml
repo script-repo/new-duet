@@ -1,0 +1,6 @@
+# Default (mock mode): kubectl apply -k deploy/k8s. Live on OpenRouter: kubectl apply -k deploy/k8s/overlays/openrouter.
+# The manifests live in base/ because kustomize won't load an overlay nested inside its own base.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - base
