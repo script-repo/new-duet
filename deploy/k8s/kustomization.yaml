@@ -1,0 +1,26 @@
+# Tandem on a single-node cluster (MicroK8s): kubectl apply -k deploy/k8s. See README.md here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: tandem
+labels:
+  - pairs: {app: tandem}  # matches the selector of the live deployment (selectors are immutable)
+    includeSelectors: true
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+# Non-secret settings. This is the patch point: edit the literals here or override them from an overlay
+# (configMapGenerator behavior: merge). The name gets a content hash, so a change rolls the pod.
+configMapGenerator:
+  - name: tandem-config
+    # TANDEM_PUBLIC_URL: how browsers and providers reach the server (OAuth redirects, push callbacks).
+    # TANDEM_MOCK: first pass runs mock models + demo data even if provider keys are set; set false for live.
+    literals:
+      - TANDEM_PUBLIC_URL=http://192.168.68.127:30090
+      - TANDEM_MOCK=true
+      - TANDEM_TIMEZONE=America/Toronto
+# Pin a build instead of latest with: newTag: sha-<short>
+images:
+  - name: ghcr.io/script-repo/new-duet
+    newTag: latest
