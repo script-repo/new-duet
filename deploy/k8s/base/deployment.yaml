@@ -8,6 +8,9 @@ spec:
     type: Recreate  # RWO volume + SQLite: never two pods on /data at once
   template:
     spec:
+      # The Service is named "tandem", so kubelet would inject TANDEM_PORT=tcp://<ip>:8000 and
+      # TANDEM_SERVICE_*; pydantic Settings reads TANDEM_* and crashes on `port`. Turn those off.
+      enableServiceLinks: false
       securityContext:
         runAsUser: 10001
         runAsGroup: 10001
@@ -28,6 +31,11 @@ spec:
                 name: tandem-env
                 optional: true
           env:
+            # Pinned explicitly so nothing injected can shadow them (see enableServiceLinks above).
+            - name: TANDEM_HOST
+              value: "0.0.0.0"
+            - name: TANDEM_PORT
+              value: "8000"
             # Required: the pod will not start until secret tandem-auth exists (README.md).
             - name: TANDEM_AUTH_TOKEN
               valueFrom:
